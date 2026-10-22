@@ -260,23 +260,59 @@ BODY may refer to the lexical variable `session'."
   (with-temp-buffer
     (let ((codex-ide-renderer-markdown-table-max-width 50)
           (codex-ide-renderer-markdown-table-max-cell-width 24)
-          (codex-ide-renderer-markdown-table-min-cell-width 8))
+          (codex-ide-renderer-markdown-table-min-cell-width 8)
+          (unicode-box-p
+           (codex-ide-renderer--markdown-table-unicode-box-safe-p)))
       (insert "| Commit | Date | Summary |\n")
       (insert "| --- | --- | --- |\n")
       (insert "| `8a1c3c8` | 2026-04-30 | Added richer incremental markdown rendering that wraps across several visual table rows. |\n")
       (codex-ide-renderer-render-markdown-region (point-min) (point-max) t)
       (let ((rendered (buffer-string)))
-        (should (string-prefix-p "┌" rendered))
-        (should (string-match-p "^├" rendered))
-        (should (string-match-p "^└" rendered))
-        (should (string-match-p "^│ 8a1c3c8 │ 2026-04-30 │ Added richer" rendered))
-        (should (string-match-p "^│         │            │ incremental markdown" rendered))
+        (should (string-prefix-p (if unicode-box-p "┌" "+") rendered))
+        (should (string-match-p (if unicode-box-p "^├" "^+") rendered))
+        (should (string-match-p (if unicode-box-p "^└" "^+") rendered))
+        (should (string-match-p
+                 (concat "^" (if unicode-box-p "│" "|")
+                         " 8a1c3c8 " (if unicode-box-p "│" "|")
+                         " 2026-04-30 " (if unicode-box-p "│" "|")
+                         " Added richer")
+                 rendered))
+        (should (string-match-p
+                 (concat "^" (if unicode-box-p "│" "|")
+                         "         " (if unicode-box-p "│" "|")
+                         "            " (if unicode-box-p "│" "|")
+                         " incremental markdown")
+                 rendered))
         (dolist (line (split-string rendered "\n" t))
           (should (<= (string-width line) 50)))))
     (goto-char (point-min))
     (search-forward "8a1c3c8")
     (should (get-text-property (match-beginning 0) 'codex-ide-markdown))
     (should (get-text-property (point-min) 'codex-ide-markdown-table-original))))
+
+(ert-deftest codex-ide-renderer-falls-back-from-wide-unicode-box-characters ()
+  (with-temp-buffer
+    (let ((codex-ide-renderer-markdown-table-max-width 50)
+          (codex-ide-renderer-markdown-table-max-cell-width 24)
+          (codex-ide-renderer-markdown-table-min-cell-width 8)
+          (original-char-width (symbol-function 'char-width))
+          (box-characters (string-to-list "─│┌┐└┘├┤┬┴┼")))
+      (cl-letf (((symbol-function 'char-width)
+                 (lambda (char)
+                   (if (memq char box-characters)
+                       2
+                     (funcall original-char-width char)))))
+        (insert "| Commit | Date | Summary |\n")
+        (insert "| --- | --- | --- |\n")
+        (insert "| `8a1c3c8` | 2026-04-30 | Added richer incremental markdown rendering that wraps across several visual table rows. |\n")
+        (codex-ide-renderer-render-markdown-region (point-min) (point-max) t)
+        (let ((rendered (buffer-string)))
+          (should (string-prefix-p "+" rendered))
+          (should (string-match-p
+                   "^| 8a1c3c8 | 2026-04-30 | Added richer"
+                   rendered))
+          (dolist (line (split-string rendered "\n" t))
+            (should (<= (string-width line) 50))))))))
 
 (ert-deftest codex-ide-renderer-wrapped-table-preserves-file-link-buttons ()
   (with-temp-buffer
@@ -287,7 +323,11 @@ BODY may refer to the lexical variable `session'."
       (insert "| --- | --- |\n")
       (insert "| [`foo.el`](/tmp/foo.el#L3C2) | This wrapped cell keeps the file link active. |\n")
       (codex-ide-renderer-render-markdown-region (point-min) (point-max) t)
-      (should (string-prefix-p "┌" (buffer-string)))
+      (should (string-prefix-p
+               (if (codex-ide-renderer--markdown-table-unicode-box-safe-p)
+                   "┌"
+                 "+")
+               (buffer-string)))
       (goto-char (point-min))
       (search-forward "foo.el")
       (let ((pos (match-beginning 0)))
@@ -305,7 +345,7 @@ BODY may refer to the lexical variable `session'."
       (insert "| [`foo.el`](/tmp/some/really/long/path/foo.el#L3C2) | ok |\n")
       (codex-ide-renderer-render-markdown-region (point-min) (point-max) t)
       (let ((rendered (buffer-string)))
-        (should-not (string-prefix-p "┌" rendered))
+        (should (string-prefix-p "|" rendered))
         (should (string-match-p "^| foo\\.el | ok" rendered))
         (should-not (string-match-p (regexp-quote "[`foo.el`]") rendered))))
     (goto-char (point-min))
@@ -548,7 +588,11 @@ BODY may refer to the lexical variable `session'."
      (should (get-text-property (match-beginning 0)
                                 'codex-ide-markdown-deferred))
      (codex-ide--render-current-agent-message-markdown session "msg-1" t)
-     (should (string-prefix-p "┌" (buffer-string)))
+     (should (string-prefix-p
+              (if (codex-ide-renderer--markdown-table-unicode-box-safe-p)
+                  "┌"
+                "+")
+              (buffer-string)))
      (goto-char (point-min))
      (search-forward "foo.el")
      (should (button-at (match-beginning 0))))))
@@ -563,7 +607,11 @@ BODY may refer to the lexical variable `session'."
       (insert "| --- | --- |\n")
       (insert "| [`foo.el`](/tmp/foo.el#L3C2) | This is a long table cell that should wrap after width constraining. |\n")
       (codex-ide-renderer-render-markdown-region (point-min) (point-max) t)
-      (should (string-prefix-p "┌" (buffer-string)))
+      (should (string-prefix-p
+               (if (codex-ide-renderer--markdown-table-unicode-box-safe-p)
+                   "┌"
+                 "+")
+               (buffer-string)))
       (should (equal (get-text-property
                       (point-min)
                       'codex-ide-markdown-table-render-width)
@@ -593,7 +641,11 @@ BODY may refer to the lexical variable `session'."
       (codex-ide-renderer-render-markdown-region (point-min) (point-max) t)
       (should (string-prefix-p "| File" (buffer-string)))
       (codex-ide-renderer-rerender-markdown-tables (point-min) (point-max) 38)
-      (should (string-prefix-p "┌" (buffer-string)))
+      (should (string-prefix-p
+               (if (codex-ide-renderer--markdown-table-unicode-box-safe-p)
+                   "┌"
+                 "+")
+               (buffer-string)))
       (should (equal (get-text-property
                       (point-min)
                       'codex-ide-markdown-table-render-width)

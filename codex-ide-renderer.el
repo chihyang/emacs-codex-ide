@@ -2280,18 +2280,24 @@ intentionally ignored."
    "|\n"))
 
 (defun codex-ide-renderer--markdown-table-box-border
-    (widths left intersection right)
-  "Return a Unicode box border for WIDTHS.
-Use LEFT, INTERSECTION, and RIGHT as the border junction characters."
+    (widths left intersection right &optional horizontal)
+  "Return a box border for WIDTHS.
+Use LEFT, INTERSECTION, and RIGHT as the border junction characters.
+HORIZONTAL defaults to the Unicode box-drawing horizontal character."
   (concat
    left
    (mapconcat
     (lambda (width)
-      (make-string (+ width 2) ?─))
+      (make-string (+ width 2) (or horizontal ?─)))
     widths
     intersection)
    right
    "\n"))
+
+(defun codex-ide-renderer--markdown-table-unicode-box-safe-p ()
+  "Return non-nil when Unicode box characters occupy one column each."
+  (seq-every-p (lambda (char) (= (char-width char) 1))
+               (string-to-list "─│┌┐└┘├┤┬┴┼")))
 
 (defun codex-ide-renderer--markdown-table-display-width (widths)
   "Return the rendered display width for a table with WIDTHS."
@@ -2412,21 +2418,26 @@ Use LEFT, INTERSECTION, and RIGHT as the border junction characters."
   (apply #'max 1 (mapcar #'string-width (split-string cell "\n"))))
 
 (defun codex-ide-renderer--markdown-table-format-box-line
-    (cells widths alignments)
-  "Return one Unicode box table line from CELLS."
+    (cells widths alignments &optional vertical)
+  "Return one box table line from CELLS.
+VERTICAL defaults to the Unicode box-drawing vertical character."
   (concat
-   "│ "
+   (string (or vertical ?│))
+   " "
    (mapconcat
     (lambda (triple)
       (pcase-let ((`(,cell ,width ,alignment) triple))
         (codex-ide-renderer--markdown-table-pad-cell cell width alignment)))
     (cl-mapcar #'list cells widths alignments)
-    " │ ")
-   " │\n"))
+    (concat " " (string (or vertical ?│)) " "))
+   " "
+   (string (or vertical ?│))
+   "\n"))
 
 (defun codex-ide-renderer--markdown-table-format-box-row
-    (cells widths alignments)
-  "Return a wrapped Unicode box table row from CELLS."
+    (cells widths alignments &optional vertical)
+  "Return a wrapped box table row from CELLS.
+VERTICAL defaults to the Unicode box-drawing vertical character."
   (let* ((wrapped-cells
           (cl-mapcar
            #'codex-ide-renderer--markdown-table-wrap-cell
@@ -2442,7 +2453,8 @@ Use LEFT, INTERSECTION, and RIGHT as the border junction characters."
            (or (nth line-index cell-lines) ""))
          wrapped-cells)
         widths
-        alignments)
+        alignments
+        vertical)
        lines))
     (apply #'concat (nreverse lines))))
 
@@ -2517,17 +2529,30 @@ Use LEFT, INTERSECTION, and RIGHT as the border junction characters."
                                  row))
                      rendered-rows)
                     (not (equal constrained-widths widths))))
+	       (unicode-box-p
+                (codex-ide-renderer--markdown-table-unicode-box-safe-p))
+	       (horizontal (if unicode-box-p ?─ ?-))
+	       (vertical (if unicode-box-p ?│ ?|))
 	       (table-text
                 (if box-table-p
                     (concat
                      (codex-ide-renderer--markdown-table-box-border
-                      constrained-widths "┌" "┬" "┐")
+                      constrained-widths
+                      (if unicode-box-p "┌" "+")
+                      (if unicode-box-p "┬" "+")
+                      (if unicode-box-p "┐" "+")
+                      horizontal)
                      (codex-ide-renderer--markdown-table-format-box-row
                       (car rendered-rows)
                       constrained-widths
-                      normalized-alignments)
+                      normalized-alignments
+                      vertical)
                      (codex-ide-renderer--markdown-table-box-border
-                      constrained-widths "├" "┼" "┤")
+                      constrained-widths
+                      (if unicode-box-p "├" "+")
+                      (if unicode-box-p "┼" "+")
+                      (if unicode-box-p "┤" "+")
+                      horizontal)
                      (mapconcat
                       #'identity
                       (cl-loop for row in (cdr rendered-rows)
@@ -2537,12 +2562,20 @@ Use LEFT, INTERSECTION, and RIGHT as the border junction characters."
                                 (codex-ide-renderer--markdown-table-format-box-row
                                  row
                                  constrained-widths
-                                 normalized-alignments)
+                                 normalized-alignments
+                                 vertical)
                                 (codex-ide-renderer--markdown-table-box-border
                                  constrained-widths
-                                 (if last "└" "├")
-                                 (if last "┴" "┼")
-                                 (if last "┘" "┤"))))
+                                 (if unicode-box-p
+                                     (if last "└" "├")
+                                   "+")
+                                 (if unicode-box-p
+                                     (if last "┴" "┼")
+                                   "+")
+                                 (if unicode-box-p
+                                     (if last "┘" "┤")
+                                   "+")
+                                 horizontal)))
                       ""))
                   (concat
                    (codex-ide-renderer--markdown-table-format-row
