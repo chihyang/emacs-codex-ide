@@ -724,10 +724,17 @@ protocol requests such as thread listing."
         (codex-ide--cleanup-session session)))))
 
 ;;;###autoload
-(defun codex-ide ()
-  "Start Codex for the current project or directory."
-  (interactive)
-  (codex-ide--start-session 'new))
+(defun codex-ide (&optional choose-directory)
+  "Start Codex in the current buffer's directory.
+With prefix argument CHOOSE-DIRECTORY, prompt for the working directory."
+  (interactive "P")
+  (let ((default-directory
+         (if choose-directory
+             (file-name-as-directory
+              (read-directory-name
+               "Codex working directory: " default-directory nil t))
+           default-directory)))
+    (codex-ide--start-session 'new)))
 
 ;;;###autoload
 (defun codex-ide-continue ()

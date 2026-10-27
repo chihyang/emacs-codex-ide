@@ -453,7 +453,10 @@ while 1 would fully replace the background with the foreground color.")
 ;;; Generated autoloads from codex-ide-session.el
 
 (autoload 'codex-ide "codex-ide-session"
-"Start Codex for the current project or directory." t)
+"Start Codex in the current buffer's directory.
+With prefix argument CHOOSE-DIRECTORY, prompt for the working directory.
+
+(fn &optional CHOOSE-DIRECTORY)" t)
 (autoload 'codex-ide-continue "codex-ide-session"
 "Resume the most recent Codex session for the current directory." t)
 (autoload 'codex-ide-show-cli-info "codex-ide-session"

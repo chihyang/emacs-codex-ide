@@ -87,7 +87,9 @@ To install using `use-package` and [straight.el](https://github.com/radian-softw
   :bind ("C-c C-;" . codex-ide-menu))
 ```
 
-After installation, run `M-x codex-ide-menu` or `M-x codex-ide` to start a session for the current project.
+After installation, run `M-x codex-ide-menu` or `M-x codex-ide` to start a
+session in the current buffer's directory.  Use `C-u M-x codex-ide` to choose
+a different working directory.
 
 ## Getting Started
 

@@ -261,11 +261,8 @@ When SUFFIX is nil, return BUFFER-NAME unchanged."
      (file-truename (expand-file-name directory)))))
 
 (defun codex-ide--get-working-directory ()
-  "Return the current project root or `default-directory'."
-  (codex-ide--normalize-directory
-   (if-let* ((project (project-current)))
-       (project-root project)
-     default-directory)))
+  "Return the current buffer's normalized `default-directory'."
+  (codex-ide--normalize-directory default-directory))
 
 (defun codex-ide--persisted-state-key (&optional session directory)
   "Return the persisted-state key for SESSION or DIRECTORY."

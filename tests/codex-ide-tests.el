@@ -301,6 +301,41 @@
 				    (should (eq started 'new))
 				    (should (equal prompt "No Codex session for this workspace. Start one? ")))))))
 
+(ert-deftest codex-ide-command-uses-current-buffer-directory ()
+  (let* ((directory (make-temp-file "codex-ide-command-" t))
+         (default-directory (file-name-as-directory directory))
+         (captured-directory nil))
+    (unwind-protect
+        (cl-letf (((symbol-function 'codex-ide--start-session)
+                   (lambda (_mode)
+                     (setq captured-directory default-directory))))
+          (codex-ide)
+          (should (equal captured-directory default-directory)))
+      (delete-directory directory t))))
+
+(ert-deftest codex-ide-command-prefix-prompts-for-directory ()
+  (let* ((current-directory (make-temp-file "codex-ide-current-" t))
+         (chosen-directory (make-temp-file "codex-ide-chosen-" t))
+         (default-directory (file-name-as-directory current-directory))
+         (prompt-default nil)
+         (captured-directory nil))
+    (unwind-protect
+        (cl-letf (((symbol-function 'read-directory-name)
+                   (lambda (_prompt directory &rest _)
+                     (setq prompt-default directory)
+                     chosen-directory))
+                  ((symbol-function 'codex-ide--start-session)
+                   (lambda (_mode)
+                     (setq captured-directory default-directory))))
+          (let ((current-prefix-arg '(4)))
+            (call-interactively #'codex-ide))
+          (should (equal prompt-default default-directory))
+          (should
+           (equal captured-directory
+                  (file-name-as-directory chosen-directory))))
+      (delete-directory current-directory t)
+      (delete-directory chosen-directory t))))
+
 (ert-deftest codex-ide-switch-to-buffer-displays-ensured-session ()
   (let ((project-dir (codex-ide-test--make-temp-project))
         (shown nil))
