@@ -293,6 +293,36 @@ Errors from `server-running-p' are treated as nil."
                          prefix
                          codex-ide-emacs-bridge-tool-timeout)))))
 
+(defun codex-ide-mcp-bridge-thread-config ()
+  "Return app-server thread config that registers the Emacs MCP bridge."
+  (when (codex-ide-mcp-bridge-enabled-p)
+    (let* ((bridge-name codex-ide-emacs-tool-bridge-name)
+           (script-path (codex-ide-mcp-bridge--resolved-script-path))
+           (python-command
+            (or (executable-find codex-ide-emacs-bridge-python-command)
+                codex-ide-emacs-bridge-python-command))
+           (emacsclient-command
+            (or (executable-find codex-ide-emacs-bridge-emacsclient-command)
+                codex-ide-emacs-bridge-emacsclient-command))
+           (server-name codex-ide-emacs-bridge-server-name)
+           (script-args
+            (append (list script-path
+                          "--emacsclient"
+                          emacsclient-command)
+                    (when (and server-name
+                               (not (string-empty-p server-name)))
+                      (list "--server-name" server-name)))))
+      (list
+       (cons 'mcp_servers
+             (list
+              (cons bridge-name
+                    `((command . ,python-command)
+                      (args . ,(vconcat script-args))
+                      (startup_timeout_sec
+                       . ,codex-ide-emacs-bridge-startup-timeout)
+                      (tool_timeout_sec
+                       . ,codex-ide-emacs-bridge-tool-timeout)))))))))
+
 (defun codex-ide-mcp-bridge--json-bool (value)
   "Return VALUE as an explicit JSON boolean."
   (if value t :json-false))

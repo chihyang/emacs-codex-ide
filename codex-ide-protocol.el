@@ -31,6 +31,8 @@
 (require 'codex-ide-core)
 (require 'codex-ide-config)
 (require 'codex-ide-errors)
+(require 'codex-ide-mcp-bridge)
+(require 'codex-ide-websocket)
 
 (declare-function codex-ide-log-message "codex-ide-log" (session format-string &rest args))
 (declare-function codex-ide--ensure-cli "codex-ide-session" ())
@@ -63,14 +65,17 @@
   (setq session (or session (codex-ide--get-default-session-for-current-buffer)))
   (unless session
     (error "No Codex session available"))
-  (let ((process (codex-ide-session-process session)))
+  (let* ((process (codex-ide-session-process session))
+         (encoded (json-encode payload)))
     (unless (process-live-p process)
       (error "Codex app-server process is not running"))
     (codex-ide-log-message
      session
      "Sending JSON-RPC payload: %s"
-     (json-encode payload))
-    (process-send-string process (concat (json-encode payload) "\n"))))
+     encoded)
+    (if (codex-ide-websocket-p process)
+        (codex-ide-websocket-send-text process encoded)
+      (process-send-string process (concat encoded "\n")))))
 
 (defun codex-ide--jsonrpc-send-response (&optional session id result)
   "Send a JSON-RPC RESULT response with ID for SESSION."
@@ -118,6 +123,12 @@
              method
              (or (alist-get 'message err)
                  (codex-ide--stringify-error-payload err))))
+     ((and (not done)
+           (codex-ide-websocket-error
+            (codex-ide-session-process session)))
+      (error "Codex daemon connection failed: %s"
+             (codex-ide-websocket-error
+              (codex-ide-session-process session))))
      ((not done)
       (codex-ide-log-message session "Request %s (id=%s) timed out" method id)
       (error "Timed out waiting for %s" method))
@@ -146,11 +157,11 @@
 
 (defun codex-ide--thread-config (&optional session)
   "Build app-server config overrides for thread start/resume in SESSION."
-  (delq nil
-        `(,@(when-let* ((effort
-                         (codex-ide-config-effective-reasoning-effort
-                          session)))
-              `((model_reasoning_effort . ,effort))))))
+  (append
+   (when-let* ((effort
+                (codex-ide-config-effective-reasoning-effort session)))
+     `((model_reasoning_effort . ,effort)))
+   (codex-ide-mcp-bridge-thread-config)))
 
 (defun codex-ide--thread-start-params (&optional session)
   "Build `thread/start` params for SESSION's current working directory."

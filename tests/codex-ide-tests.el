@@ -74,6 +74,7 @@
 
 (ert-deftest codex-ide-app-server-command-includes-bridge-and-extra-flags ()
   (let ((codex-ide-cli-path "/tmp/codex")
+        (codex-ide-app-server-transport 'stdio)
         (codex-ide-cli-extra-flags "--model test-model --debug")
         (bridge-args '("-c" "mcp_servers.emacs.command=\"python3\"")))
     (cl-letf (((symbol-function 'codex-ide-mcp-bridge-mcp-config-args)

@@ -61,6 +61,15 @@
   :group 'codex-ide)
 
 ;;;###autoload
+(defcustom codex-ide-app-server-transport 'daemon
+  "Transport used to communicate with Codex app-server.
+`daemon' connects through `codex app-server proxy' to the shared managed
+daemon.  `stdio' starts an independent app-server process for each session."
+  :type '(choice (const :tag "Shared daemon" daemon)
+                 (const :tag "Independent stdio process" stdio))
+  :group 'codex-ide)
+
+;;;###autoload
 (defcustom codex-ide-model nil
   "Optional model name for new or resumed threads and later turns."
   :type '(choice (const :tag "Default" nil)
@@ -305,6 +314,7 @@ thread-list limit."
 (require 'codex-ide-errors)
 (require 'codex-ide-window)
 (require 'codex-ide-log)
+(require 'codex-ide-websocket)
 (require 'codex-ide-protocol)
 (require 'codex-ide-mention)
 (require 'codex-ide-context)

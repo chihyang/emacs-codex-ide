@@ -80,6 +80,7 @@
 	  (codex-ide-persisted-project-state (make-hash-table :test 'equal))
           (codex-ide--session-metadata (make-hash-table :test 'eq))
           (codex-ide-session-baseline-prompt nil)
+          (codex-ide-app-server-transport 'stdio)
           (codex-ide-logging-enabled t)
           (codex-ide-new-session-split nil)
           (codex-ide-want-mcp-bridge 'prompt)

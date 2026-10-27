@@ -21,6 +21,32 @@
                           (id . "stored-response")
                           (text . "Stored response")))))))))
 
+(ert-deftest codex-ide-app-server-daemon-command-uses-proxy ()
+  (let ((codex-ide-cli-path "/tmp/codex")
+        (codex-ide-app-server-transport 'daemon)
+        (codex-ide-cli-extra-flags "--enable feature-name"))
+    (should (equal (codex-ide--app-server-command)
+                   '("/tmp/codex" "app-server" "proxy"
+                     "--enable" "feature-name")))))
+
+(ert-deftest codex-ide-daemon-session-configures-websocket-transport ()
+  (let ((project-dir (codex-ide-test--make-temp-project)))
+    (codex-ide-test-with-fixture project-dir
+      (let ((codex-ide-app-server-transport 'daemon))
+        (codex-ide-test-with-fake-processes
+          (let* ((session (codex-ide--create-process-session))
+                 (process (codex-ide-session-process session))
+                 (make-spec
+                  (plist-get (codex-ide-test-process-plist process)
+                             :make-process-spec)))
+            (should (equal (plist-get make-spec :command)
+                           (list codex-ide-cli-path "app-server" "proxy")))
+            (should (eq (plist-get make-spec :coding) 'binary))
+            (should (eq (plist-get make-spec :filter)
+                        #'codex-ide-websocket-process-filter))
+            (should (eq (process-get process 'codex-ide-websocket-state)
+                        'handshake))))))))
+
 (ert-deftest codex-ide-ensure-query-session-retires-stale-query-session ()
   (let ((project-dir (codex-ide-test--make-temp-project)))
     (codex-ide-test-with-fixture project-dir

@@ -138,6 +138,30 @@
 					       "-c" "mcp_servers.editor.startup_timeout_sec=15"
 					       "-c" "mcp_servers.editor.tool_timeout_sec=45"))))))))
 
+(ert-deftest codex-ide-mcp-bridge-thread-config-reflects-enabled-settings ()
+  (let ((codex-ide-enable-emacs-tool-bridge t)
+        (codex-ide-emacs-tool-bridge-name "editor")
+        (codex-ide-emacs-bridge-script-path "/tmp/codex-ide-mcp-server.py")
+        (codex-ide-emacs-bridge-python-command "/usr/bin/python3")
+        (codex-ide-emacs-bridge-emacsclient-command "/usr/bin/emacsclient")
+        (codex-ide-emacs-bridge-server-name "testsrv")
+        (codex-ide-emacs-bridge-startup-timeout 15)
+        (codex-ide-emacs-bridge-tool-timeout 45))
+    (cl-letf (((symbol-function 'executable-find) #'identity))
+      (should
+       (equal
+        (codex-ide-mcp-bridge-thread-config)
+        '((mcp_servers
+           ("editor"
+            (command . "/usr/bin/python3")
+            (args . ["/tmp/codex-ide-mcp-server.py"
+                     "--emacsclient"
+                     "/usr/bin/emacsclient"
+                     "--server-name"
+                     "testsrv"])
+            (startup_timeout_sec . 15)
+            (tool_timeout_sec . 45)))))))))
+
 (ert-deftest codex-ide-mcp-bridge-request-exempt-from-approval-matches-bridge-tool-payload ()
   (let ((project-dir (codex-ide-test--make-temp-project)))
     (codex-ide-test-with-fixture project-dir

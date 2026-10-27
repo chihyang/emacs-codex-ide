@@ -46,8 +46,10 @@
 (require 'codex-ide-threads)
 (require 'codex-ide-transcript)
 (require 'codex-ide-usage)
+(require 'codex-ide-websocket)
 (require 'codex-ide-window)
 
+(defvar codex-ide-app-server-transport)
 (defvar codex-ide-cli-path)
 (defvar codex-ide-cli-extra-flags)
 (defvar codex-ide-new-session-split)
@@ -111,8 +113,13 @@
 
 (defun codex-ide--app-server-command ()
   "Build the `codex app-server` command list."
-  (append (list codex-ide-cli-path "app-server" "--listen" "stdio://")
-          (codex-ide-mcp-bridge-mcp-config-args)
+  (append (pcase codex-ide-app-server-transport
+            ('daemon
+             (list codex-ide-cli-path "app-server" "proxy"))
+            (_
+             (list codex-ide-cli-path "app-server" "--listen" "stdio://")))
+          (unless (eq codex-ide-app-server-transport 'daemon)
+            (codex-ide-mcp-bridge-mcp-config-args))
           (when (not (string-empty-p codex-ide-cli-extra-flags))
             (split-string-shell-command codex-ide-cli-extra-flags))))
 
@@ -295,7 +302,8 @@ protocol requests such as thread listing."
                      :partial-line ""
                      :status "starting"))
            (stderr-process nil)
-           (process nil))
+           (process nil)
+           (daemon-transport (eq codex-ide-app-server-transport 'daemon)))
       (condition-case err
           (progn
             (setq stderr-process
@@ -311,14 +319,27 @@ protocol requests such as thread listing."
                    :name (format "codex-ide[%s]" process-label)
                    :buffer nil
                    :command (codex-ide--app-server-command)
-                   :coding 'utf-8-unix
-                   :filter #'codex-ide--process-filter
+                   :coding (if daemon-transport 'binary 'utf-8-unix)
+                   :filter (if daemon-transport
+                               #'codex-ide-websocket-process-filter
+                             #'codex-ide--process-filter)
                    :sentinel #'codex-ide--process-sentinel
                    :stderr stderr-process))
             (setf (codex-ide-session-process session) process)
             (setf (codex-ide-session-stderr-process session) stderr-process)
             (process-put process 'codex-session session)
             (process-put stderr-process 'codex-session session)
+            (when daemon-transport
+              (codex-ide-websocket-configure
+               process
+               (lambda (source message)
+                 (when-let* ((source-session
+                              (process-get source 'codex-session)))
+                   (codex-ide-log-message
+                    source-session
+                    "Received WebSocket message (%d chars)"
+                    (length message))
+                   (codex-ide--process-message source-session message)))))
             (when buffer
               (codex-ide--initialize-session-buffer session buffer working-dir))
             (set-process-query-on-exit-flag process nil)
