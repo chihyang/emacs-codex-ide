@@ -4880,7 +4880,12 @@
 					(let ((session (codex-ide--show-or-resume-thread "thread-reused-1"
 											 project-dir)))
 					  (should-not (eq session query-session))
-					  (should (= (length codex-ide--sessions) 2))
+					  (should (= (length codex-ide--sessions) 1))
+					  (should-not (memq query-session codex-ide--sessions))
+					  (should-not (process-live-p
+						       (codex-ide-session-process query-session)))
+					  (should-not (process-live-p
+						       (codex-ide-session-stderr-process query-session)))
 					  (should (codex-ide-session-query-only query-session))
 					  (should-not (codex-ide-session-query-only session))
 					  (should (equal (seq-remove (lambda (method)

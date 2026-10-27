@@ -393,6 +393,11 @@ protocol requests such as thread listing."
             (equal (codex-ide-session-directory session) directory)))
      codex-ide--sessions)))
 
+(defun codex-ide--retire-query-session-for-directory (directory)
+  "Stop the query-only session for DIRECTORY, if one is live."
+  (when-let* ((session (codex-ide--query-only-session-for-directory directory)))
+    (codex-ide--teardown-session session t)))
+
 (defun codex-ide--query-session-for-thread-selection (&optional directory)
   "Return a live session suitable for thread selection in DIRECTORY."
   (or (let ((session (codex-ide--session-for-current-buffer)))
@@ -425,6 +430,8 @@ protocol requests such as thread listing."
         (setq session (codex-ide--create-query-session)))
       (codex-ide-log-message session "Initializing background query session")
       (codex-ide--initialize-session session))
+    (unless (codex-ide--query-only-session-p session)
+      (codex-ide--retire-query-session-for-directory directory))
     session))
 
 (defun codex-ide--reusable-idle-session-for-directory (&optional directory)
@@ -446,24 +453,26 @@ protocol requests such as thread listing."
                      (or directory (codex-ide--get-working-directory))))
          (session (or (codex-ide--session-for-thread-id thread-id directory)
                       (codex-ide--reusable-idle-session-for-directory directory))))
-    (if session
-        (progn
-          (unless (codex-ide-session-thread-id session)
-            (codex-ide--reset-session-buffer session)
-            (codex-ide--resume-thread-into-session session thread-id "Resumed")
-            (codex-ide--update-header-line session))
-          (codex-ide--show-session-buffer session)
-          (unless (codex-ide--session-metadata-get session :rate-limits)
-            (codex-ide--schedule-usage-refresh session))
+    (prog1
+        (if session
+            (progn
+              (unless (codex-ide-session-thread-id session)
+                (codex-ide--reset-session-buffer session)
+                (codex-ide--resume-thread-into-session session thread-id "Resumed")
+                (codex-ide--update-header-line session))
+              (codex-ide--show-session-buffer session)
+              (unless (codex-ide--session-metadata-get session :rate-limits)
+                (codex-ide--schedule-usage-refresh session))
+              session)
+          (let ((default-directory directory))
+            (setq session (codex-ide--create-process-session)))
+          (codex-ide--initialize-session session)
+          (codex-ide--resume-thread-into-session session thread-id "Resumed")
+          (codex-ide--update-header-line session)
+          (codex-ide--show-session-buffer session :newly-created t)
+          (codex-ide--schedule-usage-refresh session)
           session)
-      (let ((default-directory directory))
-        (setq session (codex-ide--create-process-session)))
-      (codex-ide--initialize-session session)
-      (codex-ide--resume-thread-into-session session thread-id "Resumed")
-      (codex-ide--update-header-line session)
-      (codex-ide--show-session-buffer session :newly-created t)
-      (codex-ide--schedule-usage-refresh session)
-      session)))
+      (codex-ide--retire-query-session-for-directory directory))))
 
 (defun codex-ide--resume-thread-into-session (session thread-id action)
   "Attach SESSION to THREAD-ID and optionally replay prior transcript."
