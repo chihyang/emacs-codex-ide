@@ -104,6 +104,24 @@
     (should line-move-visual)
     (should-not visual-line-mode)))
 
+(ert-deftest codex-ide-status-thread-session-finds-buffer-across-directories ()
+  (let* ((root-dir (codex-ide-test--make-temp-project))
+         (buffer-dir (expand-file-name "buffer-dir" root-dir))
+         (recorded-dir (expand-file-name "recorded-dir" root-dir)))
+    (make-directory buffer-dir t)
+    (make-directory recorded-dir t)
+    (codex-ide-test-with-fixture root-dir
+      (codex-ide-test-with-fake-processes
+        (let (session)
+          (let ((default-directory buffer-dir))
+            (setq session (codex-ide--create-process-session)))
+          (setf (codex-ide-session-thread-id session) "shared-thread")
+          (should
+           (eq (codex-ide-status-mode--thread-session
+                '((id . "shared-thread"))
+                recorded-dir)
+               session)))))))
+
 (ert-deftest codex-ide-status-refresh-preserves-window-point-from-other-current-buffer ()
   (let ((status-buffer (get-buffer-create " *codex-ide-status-refresh-point*"))
         (other-buffer (get-buffer-create " *codex-ide-status-refresh-other*")))
@@ -1173,7 +1191,7 @@
   (should (eq (lookup-key codex-ide-status-mode-map (kbd "K"))
               #'codex-ide-status-mode-kill-buffer-at-point)))
 
-(ert-deftest codex-ide-status-display-session-at-point-other-window-binds-pop-up-action ()
+(ert-deftest codex-ide-status-display-session-at-point-uses-other-window-action ()
   (let ((captured-action nil)
         (section 'buffer-section))
     (with-temp-buffer
@@ -1184,12 +1202,38 @@
                  (lambda (_section)
                    (setq captured-action codex-ide-display-buffer-pop-up-action))))
         (call-interactively
-         #'codex-ide-status-mode-display-session-at-point-other-window)))
+         #'codex-ide-status-mode-display-session-at-point)))
     (should (equal captured-action
                    '((display-buffer-reuse-window
                       display-buffer-use-some-window
                       display-buffer-pop-up-window)
                      (inhibit-same-window . t))))))
+
+(ert-deftest codex-ide-status-ret-preserves-status-and-selects-session-window ()
+  (save-window-excursion
+    (delete-other-windows)
+    (let ((status-buffer (generate-new-buffer " *codex-ide-status-window-test*"))
+          (session-buffer (generate-new-buffer " *codex-ide-status-session-test*")))
+      (unwind-protect
+          (let* ((session (make-codex-ide-session :buffer session-buffer))
+                 (section (codex-ide-section--create
+                           :type 'buffer
+                           :value session)))
+            (switch-to-buffer status-buffer)
+            (codex-ide-status-mode)
+            (cl-letf (((symbol-function 'codex-ide-status-mode--actionable-section-at-point)
+                       (lambda () section))
+                      ((symbol-function 'codex-ide--ensure-input-prompt)
+                       (lambda (_session) nil)))
+              (call-interactively
+               #'codex-ide-status-mode-display-session-at-point))
+            (should (= (length (window-list nil 'no-minibuf)) 2))
+            (should (eq (window-buffer (selected-window)) session-buffer))
+            (should (get-buffer-window status-buffer)))
+        (when (buffer-live-p status-buffer)
+          (kill-buffer status-buffer))
+        (when (buffer-live-p session-buffer)
+          (kill-buffer session-buffer))))))
 
 (ert-deftest codex-ide-status-thread-section-hides-context-preview-and-shows-compact-metadata ()
   (let* ((root-dir (codex-ide-test--make-temp-project))

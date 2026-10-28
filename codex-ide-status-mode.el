@@ -412,17 +412,17 @@ Only child `buffer' and `thread' sections support visit and delete actions."
       (codex-ide-status-mode-refresh))))
 
 (defun codex-ide-status-mode-display-session-at-point ()
-  "Display the session for the actionable status entry at point."
+  "Display the session at point in another window when possible."
   (interactive)
-  (codex-ide-status-mode--visit-section
-   (codex-ide-status-mode--actionable-section-at-point)))
+  (let ((codex-ide-display-buffer-pop-up-action
+         codex-ide--display-buffer-other-window-pop-up-action))
+    (codex-ide-status-mode--visit-section
+     (codex-ide-status-mode--actionable-section-at-point))))
 
 (defun codex-ide-status-mode-display-session-at-point-other-window ()
   "Display the session for the actionable status entry at point in another window."
   (interactive)
-  (let ((codex-ide-display-buffer-pop-up-action
-         codex-ide--display-buffer-other-window-pop-up-action))
-    (codex-ide-status-mode-display-session-at-point)))
+  (codex-ide-status-mode-display-session-at-point))
 
 (defun codex-ide-status-mode-delete-thing-at-point ()
   "Delete the actionable status entry at point or every entry in the active region."
@@ -685,22 +685,13 @@ The plist contains `:text', `:start', and `:end'."
     (list :status-width status-width
           :updated-width updated-width)))
 
-(defun codex-ide-status-mode--thread-updated-at-time (thread)
-  "Return THREAD's `updatedAt' value as an Emacs time."
-  (let ((updated-at (alist-get 'updatedAt thread)))
-    (cond
-     ((numberp updated-at) (seconds-to-time updated-at))
-     ((stringp updated-at) (or (ignore-errors (date-to-time updated-at))
-                               (seconds-to-time 0)))
-     (t (seconds-to-time 0)))))
-
 (defun codex-ide-status-mode--sort-threads-by-updated (threads)
   "Return THREADS sorted by most recently updated first."
   (sort (copy-sequence threads)
         (lambda (left right)
           (time-less-p
-           (codex-ide-status-mode--thread-updated-at-time right)
-           (codex-ide-status-mode--thread-updated-at-time left)))))
+           (codex-ide--thread-updated-at-time right)
+           (codex-ide--thread-updated-at-time left)))))
 
 (defun codex-ide-status-mode--last-agent-response-range (session)
   "Return the start and end positions of SESSION's last agent response."
@@ -943,15 +934,16 @@ Return nil when there is no agent reply."
 
 (defun codex-ide-status-mode--thread-status (thread directory)
   "Return the display status for THREAD in DIRECTORY."
-  (if-let* ((session (codex-ide--session-for-thread-id
-                      (alist-get 'id thread)
-                      directory)))
+  (ignore directory)
+  (if-let* ((session (codex-ide--session-for-thread-id-any
+                      (alist-get 'id thread))))
       (codex-ide-session-status session)
     "stored"))
 
 (defun codex-ide-status-mode--thread-session (thread directory)
-  "Return the live session linked to THREAD in DIRECTORY, if any."
-  (codex-ide--session-for-thread-id (alist-get 'id thread) directory))
+  "Return the live session linked to THREAD, regardless of DIRECTORY."
+  (ignore directory)
+  (codex-ide--session-for-thread-id-any (alist-get 'id thread)))
 
 (defun codex-ide-status-mode--insert-thread-metadata-line (label value)
   "Insert a thread metadata line with LABEL and VALUE."
