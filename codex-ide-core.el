@@ -450,6 +450,13 @@ current buffer's project directory."
     (or directory (codex-ide--get-working-directory))
     t)))
 
+(defun codex-ide--session-for-thread-id-any (thread-id)
+  "Return any live buffer session associated with THREAD-ID."
+  (seq-find
+   (lambda (session)
+     (equal (codex-ide-session-thread-id session) thread-id))
+   (codex-ide--session-buffer-sessions)))
+
 (defun codex-ide--set-session (&optional session)
   "Register SESSION in the global session list."
   (setq session (or session (codex-ide--get-default-session-for-current-buffer)))

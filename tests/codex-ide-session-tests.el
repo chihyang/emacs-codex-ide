@@ -95,6 +95,37 @@
               (should-not (process-live-p
                            (codex-ide-session-stderr-process query-session))))))))))
 
+(ert-deftest codex-ide-show-or-resume-thread-prefers-buffer-across-directories ()
+  (let* ((root-dir (codex-ide-test--make-temp-project))
+         (buffer-dir (expand-file-name "buffer-dir" root-dir))
+         (recorded-dir (expand-file-name "recorded-dir" root-dir)))
+    (make-directory buffer-dir t)
+    (make-directory recorded-dir t)
+    (codex-ide-test-with-fixture root-dir
+      (codex-ide-test-with-fake-processes
+        (let (session shown)
+          (let ((default-directory buffer-dir))
+            (setq session (codex-ide--create-process-session)))
+          (setf (codex-ide-session-thread-id session) "shared-thread"
+                (codex-ide-session-status session) "idle")
+          (cl-letf (((symbol-function 'codex-ide--show-session-buffer)
+                     (lambda (candidate &rest _)
+                       (setq shown candidate)
+                       candidate))
+                    ((symbol-function 'codex-ide--create-process-session)
+                     (lambda (&rest _)
+                       (ert-fail "Must not create another session")))
+                    ((symbol-function 'codex-ide--resume-thread-into-session)
+                     (lambda (&rest _)
+                       (ert-fail "Must not resume an already open thread")))
+                    ((symbol-function 'codex-ide--schedule-usage-refresh)
+                     #'ignore))
+            (should
+             (eq (codex-ide--show-or-resume-thread
+                  "shared-thread" recorded-dir)
+                 session))
+            (should (eq shown session))))))))
+
 (provide 'codex-ide-session-tests)
 
 ;;; codex-ide-session-tests.el ends here

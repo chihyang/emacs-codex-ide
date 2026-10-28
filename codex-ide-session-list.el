@@ -81,21 +81,21 @@
   (funcall codex-ide-session-list--entries-function))
 
 (defun codex-ide-session-list-display-session-at-point ()
-  "Display the session for the row at point."
+  "Display the session for the row at point in another window when possible."
   (interactive)
   (unless (functionp codex-ide-session-list--visit-function)
     (user-error "Nothing to visit in this list"))
   (let ((id (tabulated-list-get-id)))
     (unless id
       (user-error "No list entry at point"))
-    (funcall codex-ide-session-list--visit-function id)))
+    (let ((codex-ide-display-buffer-pop-up-action
+           codex-ide--display-buffer-other-window-pop-up-action))
+      (funcall codex-ide-session-list--visit-function id))))
 
 (defun codex-ide-session-list-display-session-at-point-other-window ()
   "Display the session for the row at point in another window."
   (interactive)
-  (let ((codex-ide-display-buffer-pop-up-action
-         codex-ide--display-buffer-other-window-pop-up-action))
-    (codex-ide-session-list-display-session-at-point)))
+  (codex-ide-session-list-display-session-at-point))
 
 (defun codex-ide-session-list-selected-ids ()
   "Return ids from the current row or every row touched by the active region."

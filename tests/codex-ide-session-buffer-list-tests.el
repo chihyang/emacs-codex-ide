@@ -312,7 +312,7 @@
   (should (eq (lookup-key codex-ide-session-buffer-list-mode-map (kbd "C-M-j"))
               #'codex-ide-session-list-display-session-at-point-other-window)))
 
-(ert-deftest codex-ide-session-list-display-session-at-point-other-window-forwards-pop-up-action ()
+(ert-deftest codex-ide-session-list-display-session-at-point-uses-other-window-action ()
   (let ((captured-action nil)
         (session-buffer (generate-new-buffer " *codex-ide-session-list-test*")))
     (unwind-protect
@@ -321,7 +321,9 @@
             (codex-ide-session-list-mode)
             (setq-local codex-ide-session-list--visit-function
                         (lambda (_id)
-                          (codex-ide--show-session-buffer session)))
+                          (codex-ide--show-session-buffer
+                           session
+                           :newly-created t)))
             (cl-letf (((symbol-function 'tabulated-list-get-id)
                        (lambda () "session-1"))
                       ((symbol-function 'codex-ide-display-buffer)
@@ -331,7 +333,7 @@
                       ((symbol-function 'codex-ide--ensure-input-prompt)
                        (lambda (_session) nil)))
               (call-interactively
-               #'codex-ide-session-list-display-session-at-point-other-window))))
+               #'codex-ide-session-list-display-session-at-point))))
       (when (buffer-live-p session-buffer)
         (kill-buffer session-buffer)))
     (should (equal captured-action
@@ -339,6 +341,32 @@
                       display-buffer-use-some-window
                       display-buffer-pop-up-window)
                      (inhibit-same-window . t))))))
+
+(ert-deftest codex-ide-session-list-ret-preserves-list-and-selects-session-window ()
+  (save-window-excursion
+    (delete-other-windows)
+    (let ((list-buffer (generate-new-buffer " *codex-ide-list-window-test*"))
+          (session-buffer (generate-new-buffer " *codex-ide-session-window-test*")))
+      (unwind-protect
+          (let ((session (make-codex-ide-session :buffer session-buffer)))
+            (switch-to-buffer list-buffer)
+            (codex-ide-session-list-mode)
+            (setq-local codex-ide-session-list--visit-function
+                        (lambda (_id)
+                          (codex-ide--show-session-buffer session)))
+            (cl-letf (((symbol-function 'tabulated-list-get-id)
+                       (lambda () "session-1"))
+                      ((symbol-function 'codex-ide--ensure-input-prompt)
+                       (lambda (_session) nil)))
+              (call-interactively
+               #'codex-ide-session-list-display-session-at-point))
+            (should (= (length (window-list nil 'no-minibuf)) 2))
+            (should (eq (window-buffer (selected-window)) session-buffer))
+            (should (get-buffer-window list-buffer)))
+        (when (buffer-live-p list-buffer)
+          (kill-buffer list-buffer))
+        (when (buffer-live-p session-buffer)
+          (kill-buffer session-buffer))))))
 
 (provide 'codex-ide-session-buffer-list-tests)
 

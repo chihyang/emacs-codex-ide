@@ -659,6 +659,13 @@ interval as the default.  Active loops are rescheduled from now.
 (register-definition-prefixes "codex-ide-loop" '("codex-ide-loop-"))
 
 
+;;; Generated autoloads from codex-ide-agents.el
+
+(autoload 'codex-ide-agents "codex-ide-agents"
+"Show a flat list of Codex sessions across all working directories." t)
+(register-definition-prefixes "codex-ide-agents" '("codex-ide-agents-"))
+
+
 ;;; End of scraped data
 
 (provide 'codex-ide-autoloads)

@@ -67,6 +67,7 @@
   (should (transient-get-suffix 'codex-ide-menu "p"))
   (should (transient-get-suffix 'codex-ide-menu "i"))
   (should (transient-get-suffix 'codex-ide-menu "I"))
+  (should (transient-get-suffix 'codex-ide-menu "a"))
   (should (transient-get-suffix 'codex-ide-menu "l"))
   (should (equal (codex-ide-test--transient-suffix-prop
                   (transient-get-suffix 'codex-ide-menu "D")

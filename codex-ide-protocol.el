@@ -401,6 +401,25 @@ CALLBACK is called with RESULT and ERROR."
      ((member (alist-get 'author item) '("assistant" assistant)) 'assistant)
      (t nil))))
 
+(cl-defun codex-ide--list-threads-page
+    (&optional session &key cwd limit sort-key cursor)
+  "Return one page of threads using SESSION.
+CWD filters the result to an exact working directory when non-nil.  Omitting
+CWD requests threads across all directories.  LIMIT controls the page size,
+SORT-KEY defaults to `updated_at', and CURSOR continues a previous page."
+  (setq session (or session (codex-ide--get-default-session-for-current-buffer)))
+  (unless session
+    (error "No Codex session available"))
+  (let* ((limit (or limit codex-ide-thread-list-default-limit))
+         (sort-key (or sort-key "updated_at"))
+         (params
+          (delq nil
+                `(,(when cwd `(cwd . ,cwd))
+                  (limit . ,limit)
+                  (sortKey . ,sort-key)
+                  ,(when cursor `(cursor . ,cursor))))))
+    (codex-ide--request-sync session "thread/list" params)))
+
 (cl-defun codex-ide--list-threads (&optional session &key limit sort-key)
   "List threads for the current working directory using SESSION.
 
@@ -409,17 +428,47 @@ SORT-KEY is nil, sort by `updated_at'."
   (setq session (or session (codex-ide--get-default-session-for-current-buffer)))
   (unless session
     (error "No Codex session available"))
-  (let* ((working-dir (codex-ide-session-directory session))
-         (limit (or limit codex-ide-thread-list-default-limit))
-         (sort-key (or sort-key "updated_at"))
-         (result (codex-ide--request-sync
-                  session
-                  "thread/list"
-                  `((cwd . ,working-dir)
-                    (limit . ,limit)
-                    (sortKey . ,sort-key))))
+  (let* ((result
+          (codex-ide--list-threads-page
+           session
+           :cwd (codex-ide-session-directory session)
+           :limit limit
+           :sort-key sort-key))
          (data (alist-get 'data result)))
     (append data nil)))
+
+(cl-defun codex-ide--list-threads-across-directories
+    (&optional session &key limit sort-key)
+  "List all threads across directories using SESSION.
+
+LIMIT is the page size and defaults to `codex-ide-thread-list-default-limit'.
+SORT-KEY defaults to `updated_at'.  Follow every server pagination cursor."
+  (setq session (or session (codex-ide--get-default-session-for-current-buffer)))
+  (unless session
+    (error "No Codex session available"))
+  (let ((cursor nil)
+        (threads nil)
+        (seen-cursors (make-hash-table :test #'equal))
+        page
+        next-cursor)
+    (while
+        (progn
+          (setq page
+                (codex-ide--list-threads-page
+                 session
+                 :limit limit
+                 :sort-key sort-key
+                 :cursor cursor))
+          (setq threads
+                (nconc threads (append (alist-get 'data page) nil)))
+          (setq next-cursor (alist-get 'nextCursor page))
+          (when (and next-cursor (gethash next-cursor seen-cursors))
+            (error "Codex thread listing returned a repeated pagination cursor"))
+          (when next-cursor
+            (puthash next-cursor t seen-cursors))
+          (setq cursor next-cursor))
+      cursor)
+    threads))
 
 (defun codex-ide--list-models (&optional session)
   "List available models using SESSION."

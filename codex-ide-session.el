@@ -472,7 +472,7 @@ protocol requests such as thread listing."
   "Show THREAD-ID in DIRECTORY, resuming it into a session when needed."
   (let* ((directory (codex-ide--normalize-directory
                      (or directory (codex-ide--get-working-directory))))
-         (session (or (codex-ide--session-for-thread-id thread-id directory)
+         (session (or (codex-ide--session-for-thread-id-any thread-id)
                       (codex-ide--reusable-idle-session-for-directory directory))))
     (prog1
         (if session
@@ -606,7 +606,7 @@ protocol requests such as thread listing."
                      (codex-ide--pick-thread query-session omit-thread-id))))
             (setq thread-id (alist-get 'id thread))
             (when-let* ((existing-session
-                         (codex-ide--session-for-thread-id thread-id working-dir)))
+                         (codex-ide--session-for-thread-id-any thread-id)))
               (setq reused-session existing-session)))
           (if reused-session
               (progn

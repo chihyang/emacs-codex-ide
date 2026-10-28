@@ -40,6 +40,15 @@
         updated-at))
    (t "")))
 
+(defun codex-ide--thread-updated-at-time (thread)
+  "Return THREAD's `updatedAt' value as an Emacs time."
+  (let ((updated-at (alist-get 'updatedAt thread)))
+    (cond
+     ((numberp updated-at) (seconds-to-time updated-at))
+     ((stringp updated-at) (or (ignore-errors (date-to-time updated-at))
+                               (seconds-to-time 0)))
+     (t (seconds-to-time 0)))))
+
 (defun codex-ide--thread-choice-preview (value)
   "Format thread preview VALUE for completion labels."
   (let* ((text (or value ""))

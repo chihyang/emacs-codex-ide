@@ -19,13 +19,7 @@
 ;;; Code:
 
 (require 'subr-x)
-
-(defun codex-ide--session-for-thread-id-any (thread-id)
-  "Return any live session tracking THREAD-ID."
-  (seq-find
-   (lambda (session)
-     (equal (codex-ide-session-thread-id session) thread-id))
-   (codex-ide--session-buffer-sessions)))
+(require 'codex-ide-core)
 
 (defun codex-ide--codex-home ()
   "Return the active Codex home directory."
