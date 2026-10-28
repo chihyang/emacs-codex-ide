@@ -14,6 +14,7 @@
 
 (require 'subr-x)
 (require 'codex-ide)
+(require 'codex-ide-agent-detail)
 (require 'codex-ide-session-list)
 
 (defvar-local codex-ide-agents--query-directory nil
@@ -28,6 +29,7 @@
 
 (set-keymap-parent codex-ide-agents-mode-map codex-ide-session-list-mode-map)
 (define-key codex-ide-agents-mode-map (kbd "l") #'codex-ide-agents-refresh)
+(define-key codex-ide-agents-mode-map (kbd "i") #'codex-ide-agents-detail)
 
 (define-derived-mode codex-ide-agents-mode codex-ide-session-list-mode
   "Codex-Agents"
@@ -155,6 +157,17 @@ LEFT and RIGHT are tabulated-list entries whose thread metadata is stored in
       (user-error "This Codex session has no resumable thread or directory"))
     (codex-ide--prepare-session-operations)
     (codex-ide--show-or-resume-thread thread-id directory)))
+
+(defun codex-ide-agents-detail ()
+  "Inspect metadata and relationships for the agent session at point."
+  (interactive)
+  (let* ((row-id (tabulated-list-get-id))
+         (thread-id (car-safe row-id))
+         (thread (and thread-id
+                      (gethash thread-id codex-ide-agents--threads-by-id))))
+    (unless thread
+      (user-error "No Codex agent session at point"))
+    (codex-ide-agent-detail-show thread codex-ide-agents--query-directory)))
 
 (defun codex-ide-agents-refresh (&optional _ignore-auto _noconfirm)
   "Refresh the global Codex agents list."

@@ -21,6 +21,8 @@ This package provides native integration with `codex app-server` which, unlike t
 - Provides an interactive configuration menu for model choice, sandboxing, personality, and other session controls.
 - Shows live header-line status for quota and token usage while a session is running.
 - Provides a session management mode to preview, search, and restore previous Codex sessions from inside Emacs.
+- Browses sessions across every working directory, with a detail view for
+  metadata and parent/subagent navigation.
 
 ### Screenshots
 
@@ -111,6 +113,12 @@ Key bindings:
 - `C-M-p` and `C-M-n` move between prompt lines.
 - `M-p` and `M-n` cycle prompt history while point is in the active prompt.
 - `TAB` and `S-TAB` move between clickable buttons and file links.
+
+Type `/agents` at the active prompt to open the global agents browser. The same
+browser is available as `M-x codex-ide-agents` and from the main menu. In the
+agents list, `RET` opens or resumes a session and `i` opens its detail view.
+The detail view uses clickable parent and subagent names; `^` moves to the
+parent and `o` opens or resumes the displayed session.
 
 ### Session diff buffer
 

@@ -127,7 +127,37 @@
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "M-<return>"))
               #'codex-ide-session-list-display-session-at-point-other-window))
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "l"))
-              #'codex-ide-agents-refresh)))
+              #'codex-ide-agents-refresh))
+  (should (eq (lookup-key codex-ide-agents-mode-map (kbd "i"))
+              #'codex-ide-agents-detail)))
+
+(ert-deftest codex-ide-agents-detail-inspects-row-thread ()
+  (let ((threads-by-id (make-hash-table :test #'equal))
+        (query-directory "/tmp/query/")
+        (thread (codex-ide-agents-test--thread
+                 "thread-detail" "/tmp/project" "Inspect me" "notLoaded" 20))
+        inspected)
+    (puthash "thread-detail" thread threads-by-id)
+    (with-temp-buffer
+      (codex-ide-agents-mode)
+      (setq-local codex-ide-agents--threads-by-id
+                  threads-by-id
+                  codex-ide-agents--query-directory
+                  query-directory)
+      (setq tabulated-list-format [("Session" 15 t)]
+            tabulated-list-entries
+            (list (list (cons "thread-detail" "/tmp/project")
+                        (vector "Inspect me"))))
+      (tabulated-list-init-header)
+      (tabulated-list-print)
+      (goto-char (point-min))
+      (search-forward "Inspect me")
+      (beginning-of-line)
+      (cl-letf (((symbol-function 'codex-ide-agent-detail-show)
+                 (lambda (selected directory)
+                   (setq inspected (list selected directory)))))
+        (codex-ide-agents-detail)))
+    (should (equal inspected (list thread "/tmp/query/")))))
 
 (ert-deftest codex-ide-agents-uses-width-stable-truncation-ellipsis ()
   (with-temp-buffer

@@ -402,10 +402,11 @@ CALLBACK is called with RESULT and ERROR."
      (t nil))))
 
 (cl-defun codex-ide--list-threads-page
-    (&optional session &key cwd limit sort-key cursor)
+    (&optional session &key cwd parent-thread-id limit sort-key cursor)
   "Return one page of threads using SESSION.
 CWD filters the result to an exact working directory when non-nil.  Omitting
-CWD requests threads across all directories.  LIMIT controls the page size,
+CWD requests threads across all directories.  PARENT-THREAD-ID restricts the
+result to direct children of that thread.  LIMIT controls the page size,
 SORT-KEY defaults to `updated_at', and CURSOR continues a previous page."
   (setq session (or session (codex-ide--get-default-session-for-current-buffer)))
   (unless session
@@ -415,6 +416,8 @@ SORT-KEY defaults to `updated_at', and CURSOR continues a previous page."
          (params
           (delq nil
                 `(,(when cwd `(cwd . ,cwd))
+                  ,(when parent-thread-id
+                     `(parentThreadId . ,parent-thread-id))
                   (limit . ,limit)
                   (sortKey . ,sort-key)
                   ,(when cursor `(cursor . ,cursor))))))
@@ -464,6 +467,43 @@ SORT-KEY defaults to `updated_at'.  Follow every server pagination cursor."
           (setq next-cursor (alist-get 'nextCursor page))
           (when (and next-cursor (gethash next-cursor seen-cursors))
             (error "Codex thread listing returned a repeated pagination cursor"))
+          (when next-cursor
+            (puthash next-cursor t seen-cursors))
+          (setq cursor next-cursor))
+      cursor)
+    threads))
+
+(cl-defun codex-ide--list-child-threads
+    (&optional session parent-thread-id &key limit sort-key)
+  "List every direct child of PARENT-THREAD-ID using SESSION.
+
+LIMIT is the page size and defaults to `codex-ide-thread-list-default-limit'.
+SORT-KEY defaults to `updated_at'.  Follow every server pagination cursor."
+  (setq session (or session (codex-ide--get-default-session-for-current-buffer)))
+  (unless session
+    (error "No Codex session available"))
+  (unless (and (stringp parent-thread-id)
+               (not (string-empty-p parent-thread-id)))
+    (error "Invalid parent thread id: %S" parent-thread-id))
+  (let ((cursor nil)
+        (threads nil)
+        (seen-cursors (make-hash-table :test #'equal))
+        page
+        next-cursor)
+    (while
+        (progn
+          (setq page
+                (codex-ide--list-threads-page
+                 session
+                 :parent-thread-id parent-thread-id
+                 :limit limit
+                 :sort-key sort-key
+                 :cursor cursor))
+          (setq threads
+                (nconc threads (append (alist-get 'data page) nil)))
+          (setq next-cursor (alist-get 'nextCursor page))
+          (when (and next-cursor (gethash next-cursor seen-cursors))
+            (error "Codex child thread listing returned a repeated pagination cursor"))
           (when next-cursor
             (puthash next-cursor t seen-cursors))
           (setq cursor next-cursor))

@@ -58,6 +58,38 @@
              (codex-ide--list-threads-across-directories session)
              :type 'error)))))))
 
+(ert-deftest codex-ide-list-child-threads-filters-by-parent-and-paginates ()
+  (let ((project-dir (codex-ide-test--make-temp-project))
+        (requests nil))
+    (codex-ide-test-with-fixture project-dir
+      (codex-ide-test-with-fake-processes
+        (let ((session (codex-ide--create-process-session)))
+          (cl-letf (((symbol-function 'codex-ide--request-sync)
+                     (lambda (_session method params)
+                       (push (cons method params) requests)
+                       (if (alist-get 'cursor params)
+                           '((data . [((id . "child-2"))]))
+                         '((data . [((id . "child-1"))])
+                           (nextCursor . "page-2"))))))
+            (should
+             (equal
+              (codex-ide--list-child-threads
+               session "parent-1" :limit 25)
+              '(((id . "child-1"))
+                ((id . "child-2")))))
+            (should
+             (equal
+              (nreverse requests)
+              '(("thread/list"
+                 (parentThreadId . "parent-1")
+                 (limit . 25)
+                 (sortKey . "updated_at"))
+                ("thread/list"
+                 (parentThreadId . "parent-1")
+                 (limit . 25)
+                 (sortKey . "updated_at")
+                 (cursor . "page-2")))))))))))
+
 (provide 'codex-ide-protocol-tests)
 
 ;;; codex-ide-protocol-tests.el ends here
