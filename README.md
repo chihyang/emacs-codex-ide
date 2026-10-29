@@ -117,6 +117,10 @@ Key bindings:
 Type `/agents` at the active prompt to open the global agents browser. The same
 browser is available as `M-x codex-ide-agents` and from the main menu. In the
 agents list, `RET` opens or resumes a session and `i` opens its detail view.
+Deletion follows Dired conventions: `d` marks a session, `u` removes the mark,
+`U` clears all marks, and `X` confirms deletion of the marked sessions. `D`
+confirms and deletes the session at point. Deletion failures open an operation
+buffer with the error and a recovery tip.
 The detail view uses clickable parent and subagent names; `^` moves to the
 parent and `o` opens or resumes the displayed session.
 

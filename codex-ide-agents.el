@@ -30,6 +30,11 @@
 (set-keymap-parent codex-ide-agents-mode-map codex-ide-session-list-mode-map)
 (define-key codex-ide-agents-mode-map (kbd "l") #'codex-ide-agents-refresh)
 (define-key codex-ide-agents-mode-map (kbd "i") #'codex-ide-agents-detail)
+(define-key codex-ide-agents-mode-map (kbd "d") #'codex-ide-agents-mark-delete)
+(define-key codex-ide-agents-mode-map (kbd "u") #'codex-ide-agents-unmark)
+(define-key codex-ide-agents-mode-map (kbd "U") #'codex-ide-agents-unmark-all)
+(define-key codex-ide-agents-mode-map (kbd "X") #'codex-ide-agents-execute-deletions)
+(define-key codex-ide-agents-mode-map (kbd "D") #'codex-ide-agents-delete)
 
 (define-derived-mode codex-ide-agents-mode codex-ide-session-list-mode
   "Codex-Agents"
@@ -168,6 +173,110 @@ LEFT and RIGHT are tabulated-list entries whose thread metadata is stored in
     (unless thread
       (user-error "No Codex agent session at point"))
     (codex-ide-agent-detail-show thread codex-ide-agents--query-directory)))
+
+(defun codex-ide-agents--thread-at-point ()
+  "Return the agent thread at point, or signal a user error."
+  (let* ((row-id (tabulated-list-get-id))
+         (thread-id (car-safe row-id))
+         (thread (and thread-id
+                      (gethash thread-id codex-ide-agents--threads-by-id))))
+    (or thread (user-error "No Codex agent session at point"))))
+
+(defun codex-ide-agents-mark-delete ()
+  "Mark the Codex session at point for deletion and advance one row."
+  (interactive)
+  (codex-ide-agents--thread-at-point)
+  (tabulated-list-put-tag "D" t))
+
+(defun codex-ide-agents-unmark ()
+  "Remove the deletion mark from the Codex session at point and advance."
+  (interactive)
+  (codex-ide-agents--thread-at-point)
+  (tabulated-list-put-tag " " t))
+
+(defun codex-ide-agents-unmark-all ()
+  "Remove every deletion mark from the current agents list."
+  (interactive)
+  (let ((count 0))
+    (save-excursion
+      (goto-char (point-min))
+      (while (not (eobp))
+        (when (and (tabulated-list-get-id)
+                   (eq (char-after (line-beginning-position)) ?D))
+          (tabulated-list-put-tag " ")
+          (setq count (1+ count)))
+        (forward-line 1)))
+    (message "Cleared %d deletion %s"
+             count
+             (if (= count 1) "mark" "marks"))))
+
+(defun codex-ide-agents--marked-threads ()
+  "Return threads marked for deletion in the current agents buffer."
+  (let (threads)
+    (save-excursion
+      (goto-char (point-min))
+      (while (not (eobp))
+        (when (eq (char-after (line-beginning-position)) ?D)
+          (when-let* ((row-id (tabulated-list-get-id))
+                      (thread-id (car-safe row-id))
+                      (thread (gethash thread-id codex-ide-agents--threads-by-id)))
+            (push thread threads)))
+        (forward-line 1)))
+    (nreverse threads)))
+
+(defun codex-ide-agents--show-delete-failures (failures)
+  "Show deletion FAILURES as a list of (THREAD-ID . ERROR-DATA)."
+  (let ((buffer (get-buffer-create "*Codex Agents Operation*")))
+    (with-current-buffer buffer
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert "Codex session deletion failed\n\n")
+        (dolist (failure failures)
+          (insert "Thread: " (car failure) "\n"
+                  "Error: " (error-message-string (cdr failure)) "\n\n"))
+        (insert "Tip: Refresh the agents list with l and check whether each "
+                "thread still has a rollout file in CODEX_HOME/sessions. "
+                "Stop active work before retrying deletion.\n")
+        (special-mode)))
+    (display-buffer buffer)))
+
+(defun codex-ide-agents--delete-threads (threads)
+  "Confirm and permanently delete THREADS, then refresh the agents list."
+  (let ((count (length threads)))
+    (when (yes-or-no-p
+           (if (= count 1)
+               (let ((thread (car threads)))
+                 (format "Permanently delete Codex session %s (%s)? "
+                         (codex-ide-agents--title thread)
+                         (alist-get 'id thread)))
+             (format "Permanently delete %d marked Codex sessions? " count)))
+      (let (deleted failures)
+        (dolist (thread threads)
+          (let ((thread-id (alist-get 'id thread)))
+            (condition-case err
+                (progn
+                  (codex-ide-delete-session-thread thread-id t)
+                  (setq deleted t))
+              (error
+               (push (cons thread-id err) failures)))))
+        (when deleted
+          (codex-ide-agents-refresh))
+        (when failures
+          (codex-ide-agents--show-delete-failures (nreverse failures)))))))
+
+(defun codex-ide-agents-execute-deletions ()
+  "Confirm and permanently delete every session marked with `d'."
+  (interactive)
+  (let ((threads (codex-ide-agents--marked-threads)))
+    (unless threads
+      (user-error "No Codex agent sessions marked for deletion"))
+    (codex-ide-agents--delete-threads threads)))
+
+(defun codex-ide-agents-delete ()
+  "Confirm and permanently delete the Codex session at point."
+  (interactive)
+  (codex-ide-agents--delete-threads
+   (list (codex-ide-agents--thread-at-point))))
 
 (defun codex-ide-agents-refresh (&optional _ignore-auto _noconfirm)
   "Refresh the global Codex agents list."

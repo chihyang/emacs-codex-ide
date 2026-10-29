@@ -37,6 +37,11 @@ Key behavior:
 - `l` refreshes the list; standard tabulated-list refresh behavior remains
   available.
 - `i` opens the selected session in `*Codex Agent Details*`.
+- `d` marks a session for deletion, `u` removes one mark, `U` clears all marks,
+  and `X` confirms and deletes marked sessions. `D` confirms and deletes the
+  session at point.
+  Successful deletion refreshes the list; failures show the error and recovery
+  tip in `*Codex Agents Operation*`.
 - The daemon's `updated_at` ordering is preserved, so sessions initially appear
   newest first.
 - Sorting the `Updated` column compares raw timestamps rather than the
@@ -178,6 +183,8 @@ local buffer displays `External`.
 ## Validation status
 
 - Focused detail, agents, protocol, and slash-command tests: `39/39` passed.
+- Focused agents tests after adding Dired-style deletion controls: `13/13`
+  passed.
 - Byte compilation passed for the modified runtime files:
   - `codex-ide-agent-detail.el`
   - `codex-ide-agents.el`
@@ -190,7 +197,7 @@ local buffer displays `External`.
   - `codex-ide-status-mode.el`
   - `codex-ide-threads.el`
   - `codex-ide-transient.el`
-- Full non-integration suite: `737/738` passed.
+- Full non-integration suite after adding deletion: `742/743` passed.
 - Modified runtime files were successfully reloaded into the running Emacs
   session with `bin/elisp-reload.sh`.
 - `git diff --check` passes and no generated `.elc` files remain.
@@ -226,7 +233,7 @@ No integration tests were run, in accordance with `AGENTS.md`.
 ## Deferred follow-up
 
 - Automatic refresh for external daemon activity.
-- Rename, archive, unarchive, and deletion actions.
+- Rename, archive, and unarchive actions.
 - Remote app-server support.
 - Replacing or redirecting `codex-ide-status` once the agents interface is a
   complete successor.
