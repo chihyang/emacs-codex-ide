@@ -115,8 +115,9 @@ Key bindings:
 - `TAB` and `S-TAB` move between clickable buttons and file links.
 
 Type `/agents` at the active prompt to open the global agents browser. The same
-browser is available as `M-x codex-ide-agents` and from the main menu. In the
-agents list, `RET` opens or resumes a session, `i` opens its detail view, and
+browser is available as `M-x codex-ide-agents` and from the main menu. Archived
+sessions appear alongside active sessions with `Archived` in the Status column.
+In the agents list, `RET` opens or resumes a session, `i` opens its detail view, and
 `r` renames it through the Codex app server. `c` starts a new session in the
 selected row's working directory. While the agents buffer is visible, local
 session events and a five-second fallback timer update it automatically;

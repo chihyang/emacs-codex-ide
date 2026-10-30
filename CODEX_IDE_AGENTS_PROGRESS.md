@@ -22,7 +22,7 @@ grouping rows by directory.
 | Column | Meaning |
 | --- | --- |
 | `Session` | Explicit session name, falling back to its preview or `Untitled`, displayed within a 15-character column. |
-| `Status` | Normalized daemon or live Emacs status, such as `Running`, `Idle`, or `Stored`. |
+| `Status` | Normalized daemon or live Emacs status, such as `Running`, `Idle`, `Stored`, or `Archived`. |
 | `Running In` | `Emacs` when the session has a live buffer in this Emacs, `External` when an active session has no local buffer, and blank for inactive sessions without a local buffer. |
 | `Updated` | Human-readable last-update time, sortable by the underlying timestamp. |
 | `Directory` | Full working directory, abbreviated with `~` where applicable. |
@@ -69,6 +69,8 @@ Key behavior:
   than a direct-filesystem fallback.
 - The daemon's `updated_at` ordering is preserved, so sessions initially appear
   newest first.
+- Archived sessions appear alongside active sessions, fetched through the
+  app-server's archived thread list and labeled `Archived` in `Status`.
 - Sorting the `Updated` column compares raw timestamps rather than the
   human-readable labels.
 - No transcript preview, expanded metadata, grouping, or inline detail pane is
@@ -323,7 +325,8 @@ No integration tests were run, in accordance with `AGENTS.md`.
 
 ## Deferred follow-up
 
-- Archive and unarchive actions.
+- Archive and unarchive actions through confirmed marks and `X`.
+- A `%` filter for list columns.
 - Remote app-server support.
 - Replacing or redirecting `codex-ide-status` once the agents interface is a
   complete successor.

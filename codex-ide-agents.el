@@ -245,24 +245,26 @@ disable it.  Manual refresh with `g' remains available while disabled."
 
 (defun codex-ide-agents--thread-status (thread session)
   "Return the normalized display status for THREAD and local SESSION."
-  (let* ((server-status
-          (codex-ide--normalize-session-status (alist-get 'status thread)))
-         (local-status
-          (and session
-               (codex-ide--normalize-session-status
-                (codex-ide-session-status session))))
-         (status
-          (cond
-           ((equal server-status "running")
-            (if (codex-ide-agents--active-status-p local-status)
-                local-status
-              server-status))
-           (local-status local-status)
-           (server-status server-status)
-           (t "stored"))))
-    (if (equal (downcase status) "notloaded")
-        "stored"
-      status)))
+  (if (alist-get 'archived thread)
+      "archived"
+    (let* ((server-status
+            (codex-ide--normalize-session-status (alist-get 'status thread)))
+           (local-status
+            (and session
+                 (codex-ide--normalize-session-status
+                  (codex-ide-session-status session))))
+           (status
+            (cond
+             ((equal server-status "running")
+              (if (codex-ide-agents--active-status-p local-status)
+                  local-status
+                server-status))
+             (local-status local-status)
+             (server-status server-status)
+             (t "stored"))))
+      (if (equal (downcase status) "notloaded")
+          "stored"
+        status))))
 
 (defun codex-ide-agents--running-in (status session)
   "Describe whether STATUS is associated with this Emacs or an external client."
@@ -336,7 +338,18 @@ LEFT and RIGHT are tabulated-list entries whose thread metadata is stored in
   (let ((session
          (codex-ide--ensure-query-session-for-thread-selection
           codex-ide-agents--query-directory)))
-    (let ((threads (codex-ide--list-threads-across-directories session)))
+    (let* ((active (codex-ide--list-threads-across-directories session))
+           (archived (codex-ide--list-threads-across-directories
+                      session :archived t))
+           (threads
+            (sort (append active
+                          (mapcar (lambda (thread)
+                                    (cons '(archived . t) thread))
+                                  archived))
+                  (lambda (left right)
+                    (time-less-p
+                     (codex-ide--thread-updated-at-time right)
+                     (codex-ide--thread-updated-at-time left))))))
       (setq codex-ide-agents--threads-by-id (make-hash-table :test #'equal))
       (dolist (thread threads)
         (puthash (alist-get 'id thread)

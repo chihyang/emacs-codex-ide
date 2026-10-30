@@ -433,12 +433,13 @@ CALLBACK is called with RESULT and ERROR."
      (t nil))))
 
 (cl-defun codex-ide--list-threads-page
-    (&optional session &key cwd parent-thread-id limit sort-key cursor)
+    (&optional session &key cwd parent-thread-id limit sort-key cursor archived)
   "Return one page of threads using SESSION.
 CWD filters the result to an exact working directory when non-nil.  Omitting
 CWD requests threads across all directories.  PARENT-THREAD-ID restricts the
 result to direct children of that thread.  LIMIT controls the page size,
-SORT-KEY defaults to `updated_at', and CURSOR continues a previous page."
+SORT-KEY defaults to `updated_at', and CURSOR continues a previous page.
+When ARCHIVED is non-nil, request archived threads."
   (setq session (or session (codex-ide--get-default-session-for-current-buffer)))
   (unless session
     (error "No Codex session available"))
@@ -451,6 +452,7 @@ SORT-KEY defaults to `updated_at', and CURSOR continues a previous page."
                      `(parentThreadId . ,parent-thread-id))
                   (limit . ,limit)
                   (sortKey . ,sort-key)
+                  ,(when archived '(archived . t))
                   ,(when cursor `(cursor . ,cursor))))))
     (codex-ide--request-sync session "thread/list" params)))
 
@@ -472,11 +474,12 @@ SORT-KEY is nil, sort by `updated_at'."
     (append data nil)))
 
 (cl-defun codex-ide--list-threads-across-directories
-    (&optional session &key limit sort-key)
+    (&optional session &key limit sort-key archived)
   "List all threads across directories using SESSION.
 
 LIMIT is the page size and defaults to `codex-ide-thread-list-default-limit'.
-SORT-KEY defaults to `updated_at'.  Follow every server pagination cursor."
+SORT-KEY defaults to `updated_at'.  Follow every server pagination cursor.
+When ARCHIVED is non-nil, list archived threads instead of active threads."
   (setq session (or session (codex-ide--get-default-session-for-current-buffer)))
   (unless session
     (error "No Codex session available"))
@@ -492,6 +495,7 @@ SORT-KEY defaults to `updated_at'.  Follow every server pagination cursor."
                  session
                  :limit limit
                  :sort-key sort-key
+                 :archived archived
                  :cursor cursor))
           (setq threads
                 (nconc threads (append (alist-get 'data page) nil)))
