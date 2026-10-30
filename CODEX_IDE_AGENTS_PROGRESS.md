@@ -37,6 +37,9 @@ Key behavior:
 - `l` refreshes the list; standard tabulated-list refresh behavior remains
   available.
 - `i` opens the selected session in `*Codex Agent Details*`.
+- `c` creates a new session in the selected row's working directory through
+  the normal Codex session lifecycle and window policy. Missing or inaccessible
+  directories are rejected before session startup.
 - `r` prompts for a non-empty explicit session name and renames the selected
   thread through the app server. Failures leave the displayed name unchanged
   and open `*Codex Agents Operation*` with recovery guidance.
@@ -104,6 +107,12 @@ The new `codex-ide-agents.el` module contains:
 - Session renaming through the official `thread/name/set` app-server method.
 - Local session closing through the standard buffer teardown lifecycle, without
   deleting the stored app-server thread.
+- New-session creation in a selected row's directory through the existing
+  `codex-ide` entry point.
+- Shared-daemon notification routing recognizes thread IDs nested in
+  `thread/started` payloads. Starting another session therefore cannot overwrite
+  an existing buffer's thread association or make the agents browser resume a
+  duplicate buffer.
 
 ### Agent detail buffer
 
@@ -173,6 +182,8 @@ local buffer displays `External`.
     rename request, refreshing on success, and reporting failure.
   - `k`/`K` local-session checks, close and deletion mark replacement, mixed
     `X` dispatch, cancellation, refresh, and failure mark retention.
+  - `c` using the selected row's directory, rejecting unavailable directories,
+    and reporting startup failures.
 - `tests/codex-ide-agent-detail-tests.el`
   - Metadata, parent, and direct subagent rendering.
   - In-place child navigation.
@@ -191,6 +202,10 @@ local buffer displays `External`.
 - `tests/codex-ide-session-tests.el`
   - The resume path prefers an existing buffer across directory differences.
   - Closing a session kills its buffer and process and clears local state.
+- `tests/codex-ide-tests.el`
+  - A new thread's shared-daemon notification does not steal another live
+    session's thread association, while the intended new session still accepts
+    it.
 - `tests/codex-ide-transient-tests.el`
   - The main menu exposes the new agents command.
 
@@ -201,6 +216,7 @@ local buffer displays `External`.
   passed.
 - Focused protocol and agents tests after adding rename: `21/21` passed.
 - Focused agents and session tests after adding local close: `29/29` passed.
+- Focused agents tests after adding row-directory creation: `27/27` passed.
 - Byte compilation passed for the modified runtime files:
   - `codex-ide-agent-detail.el`
   - `codex-ide-agents.el`
@@ -213,7 +229,10 @@ local buffer displays `External`.
   - `codex-ide-status-mode.el`
   - `codex-ide-threads.el`
   - `codex-ide-transient.el`
-- Full non-integration suite after adding local close: `756/757` passed.
+- Focused core and agents suites after fixing nested `thread/started`
+  notification routing: `279/279` passed.
+- Full non-integration suite after adding row-directory creation and the
+  session-routing regression fix: `761/762` passed.
 - Modified runtime files were successfully reloaded into the running Emacs
   session with `bin/elisp-reload.sh`.
 - `git diff --check` passes and no generated `.elc` files remain.

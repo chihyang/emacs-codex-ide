@@ -6334,14 +6334,26 @@ still records LABEL."
                "\n")
        'shadow))))
 
+(defun codex-ide--notification-thread-id (params)
+  "Return the thread identifier carried by notification PARAMS, if any."
+  (or (alist-get 'threadId params)
+      (when-let* ((thread (alist-get 'thread params)))
+        (or (alist-get 'id thread)
+            (alist-get 'threadId thread)))
+      (when-let* ((turn (alist-get 'turn params)))
+        (alist-get 'threadId turn))))
+
 (defun codex-ide--notification-belongs-to-session-p (session params)
   "Return non-nil when notification PARAMS should mutate SESSION.
 Notifications without a `threadId' are treated as session-scoped for backward
-compatibility with older app-server payloads and global notifications."
-  (let ((notification-thread-id (alist-get 'threadId params))
+compatibility with older app-server payloads and global notifications.  Thread
+identifiers nested in `thread' or `turn' objects are also recognized."
+  (let ((notification-thread-id
+         (codex-ide--notification-thread-id params))
         (session-thread-id (codex-ide-session-thread-id session)))
     (or (null notification-thread-id)
-        (null session-thread-id)
+        (and (null session-thread-id)
+             (not (codex-ide--query-only-session-p session)))
         (equal notification-thread-id session-thread-id))))
 
 (defun codex-ide--handle-notification (&optional session message)

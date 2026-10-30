@@ -5,7 +5,8 @@
 This document records the agreed plan for the next `codex-ide-agents`
 features. Implementation is proceeding in risk order: rename, local close,
 create, automatic updates, then robust deletion. Session rename and local
-close are complete; the other work described here remains planned.
+close, and session creation are complete; the other work described here
+remains planned.
 
 The first implementation milestone will add:
 

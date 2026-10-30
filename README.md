@@ -117,7 +117,8 @@ Key bindings:
 Type `/agents` at the active prompt to open the global agents browser. The same
 browser is available as `M-x codex-ide-agents` and from the main menu. In the
 agents list, `RET` opens or resumes a session, `i` opens its detail view, and
-`r` renames it through the Codex app server.
+`r` renames it through the Codex app server. `c` starts a new session in the
+selected row's working directory.
 Local closing and deletion follow Dired conventions. `k` marks a session that
 is running in this Emacs for closing, while `d` marks a session for deletion;
 `u` removes one mark, `U` clears all marks, and `X` confirms and performs the

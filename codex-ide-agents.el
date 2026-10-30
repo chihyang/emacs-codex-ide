@@ -31,6 +31,7 @@
 (set-keymap-parent codex-ide-agents-mode-map codex-ide-session-list-mode-map)
 (define-key codex-ide-agents-mode-map (kbd "l") #'codex-ide-agents-refresh)
 (define-key codex-ide-agents-mode-map (kbd "i") #'codex-ide-agents-detail)
+(define-key codex-ide-agents-mode-map (kbd "c") #'codex-ide-agents-create)
 (define-key codex-ide-agents-mode-map (kbd "r") #'codex-ide-agents-rename)
 (define-key codex-ide-agents-mode-map (kbd "k") #'codex-ide-agents-mark-close)
 (define-key codex-ide-agents-mode-map (kbd "d") #'codex-ide-agents-mark-delete)
@@ -205,6 +206,32 @@ FAILURES is a list of (THREAD-ID . ERROR-DATA)."
         (insert "Tip: " tip "\n")
         (special-mode)))
     (display-buffer buffer)))
+
+(defun codex-ide-agents-create ()
+  "Create a new Codex session in the selected agent's directory."
+  (interactive)
+  (let* ((thread (codex-ide-agents--thread-at-point))
+         (thread-id (alist-get 'id thread))
+         (recorded-directory (alist-get 'cwd thread)))
+    (unless (and (stringp recorded-directory)
+                 (not (string-empty-p recorded-directory)))
+      (user-error "This Codex session has no working directory"))
+    (let ((directory (file-name-as-directory
+                      (expand-file-name recorded-directory))))
+      (unless (file-accessible-directory-p directory)
+        (user-error
+         "Cannot create a Codex session; directory is unavailable: %s"
+         (abbreviate-file-name directory)))
+      (condition-case err
+          (let ((default-directory directory))
+            (codex-ide))
+        (error
+         (codex-ide-agents--show-operation-failures
+          "creation"
+          (list (cons thread-id err))
+          (concat
+           "Verify that the directory and Codex app server are available, "
+           "then retry with c.")))))))
 
 (defun codex-ide-agents-rename ()
   "Prompt for and set the explicit name of the Codex session at point."

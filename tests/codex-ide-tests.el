@@ -7764,6 +7764,33 @@
 				    (should (string-match-p "Codex:Error"
 							    (codex-ide-renderer-mode-line-status session))))))))
 
+(ert-deftest codex-ide-thread-started-notification-does-not-steal-other-session ()
+  (let ((project-dir (codex-ide-test--make-temp-project)))
+    (codex-ide-test-with-fixture project-dir
+      (codex-ide-test-with-fake-processes
+        (let ((existing-session (codex-ide--create-process-session))
+              (new-session (codex-ide--create-process-session))
+              (query-session (codex-ide--create-query-session))
+              (notification
+               '((method . "thread/started")
+                 (params . ((thread . ((id . "thread-new"))))))))
+          (setf (codex-ide-session-thread-id existing-session) "thread-existing"
+                (codex-ide-session-status existing-session) "running")
+          (codex-ide--handle-notification existing-session notification)
+          (codex-ide--handle-notification query-session notification)
+          (should (equal (codex-ide-session-thread-id existing-session)
+                         "thread-existing"))
+          (should (equal (codex-ide-session-status existing-session) "running"))
+          (should (eq (codex-ide--session-for-thread-id-any "thread-existing")
+                      existing-session))
+          (should-not (codex-ide-session-thread-id query-session))
+          (codex-ide--handle-notification new-session notification)
+          (should (equal (codex-ide-session-thread-id new-session)
+                         "thread-new"))
+          (should (equal (codex-ide-session-status new-session) "idle"))
+          (should (eq (codex-ide--session-for-thread-id-any "thread-new")
+                      new-session)))))))
+
 (ert-deftest codex-ide-ignores-notifications-for-other-threads ()
   (with-temp-buffer
     (codex-ide-session-mode)

@@ -130,6 +130,8 @@
               #'codex-ide-agents-refresh))
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "i"))
               #'codex-ide-agents-detail))
+  (should (eq (lookup-key codex-ide-agents-mode-map (kbd "c"))
+              #'codex-ide-agents-create))
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "r"))
               #'codex-ide-agents-rename))
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "k"))
@@ -169,6 +171,79 @@
        (search-forward "Delete me")
        (beginning-of-line)
        ,@body)))
+
+(ert-deftest codex-ide-agents-create-uses-selected-row-directory ()
+  (let ((directory (codex-ide-test--make-temp-project))
+        captured-directory
+        choose-directory)
+    (codex-ide-agents-test--with-selected-row
+      (setf (alist-get 'cwd
+                       (gethash "thread-delete"
+                                codex-ide-agents--threads-by-id))
+            directory)
+      (cl-letf (((symbol-function 'codex-ide)
+                 (lambda (&optional choose)
+                   (setq captured-directory default-directory
+                         choose-directory choose))))
+        (codex-ide-agents-create)))
+    (should (equal captured-directory (file-name-as-directory directory)))
+    (should-not choose-directory)))
+
+(ert-deftest codex-ide-agents-create-rejects-unavailable-directory ()
+  (let ((directory (expand-file-name
+                    "missing-codex-directory"
+                    (codex-ide-test--make-temp-project)))
+        created)
+    (codex-ide-agents-test--with-selected-row
+      (setf (alist-get 'cwd
+                       (gethash "thread-delete"
+                                codex-ide-agents--threads-by-id))
+            directory)
+      (cl-letf (((symbol-function 'codex-ide)
+                 (lambda (&rest _) (setq created t))))
+        (let ((err (should-error (codex-ide-agents-create) :type 'user-error)))
+          (should (string-match-p "directory is unavailable"
+                                  (error-message-string err))))))
+    (should-not created)))
+
+(ert-deftest codex-ide-agents-create-rejects-row-without-directory ()
+  (let (created)
+    (codex-ide-agents-test--with-selected-row
+      (setf (alist-get 'cwd
+                       (gethash "thread-delete"
+                                codex-ide-agents--threads-by-id))
+            nil)
+      (cl-letf (((symbol-function 'codex-ide)
+                 (lambda (&rest _) (setq created t))))
+        (let ((err (should-error (codex-ide-agents-create) :type 'user-error)))
+          (should (string-match-p "has no working directory"
+                                  (error-message-string err))))))
+    (should-not created)))
+
+(ert-deftest codex-ide-agents-create-failure-shows-error-and-tip ()
+  (let ((directory (codex-ide-test--make-temp-project))
+        shown)
+    (unwind-protect
+        (progn
+          (codex-ide-agents-test--with-selected-row
+            (setf (alist-get 'cwd
+                             (gethash "thread-delete"
+                                      codex-ide-agents--threads-by-id))
+                  directory)
+            (cl-letf (((symbol-function 'codex-ide)
+                       (lambda (&rest _) (error "startup rejected")))
+                      ((symbol-function 'display-buffer)
+                       (lambda (buffer &rest _) (setq shown buffer))))
+              (codex-ide-agents-create)))
+          (should (buffer-live-p shown))
+          (with-current-buffer shown
+            (should (derived-mode-p 'special-mode))
+            (should (string-match-p "session creation failed"
+                                    (buffer-string)))
+            (should (string-match-p "startup rejected" (buffer-string)))
+            (should (string-match-p "Tip:" (buffer-string)))))
+      (when (buffer-live-p shown)
+        (kill-buffer shown)))))
 
 (ert-deftest codex-ide-agents-rename-seeds-name-requests-and-refreshes ()
   (let (initial-input request refreshed)
