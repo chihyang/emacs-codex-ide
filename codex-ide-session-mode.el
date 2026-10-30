@@ -40,6 +40,8 @@
   "codex-ide-diff-view" nil t)
 (autoload 'codex-ide-apply-config-preset
   "codex-ide-transient" nil t)
+(autoload 'codex-ide-agents
+  "codex-ide-agents" nil t)
 
 (defvar codex-ide-session-enable-visual-line-mode)
 (defvar corfu-mode)
@@ -81,6 +83,7 @@
 
 (define-key codex-ide-session-mode-map (kbd "C-c C-c") #'codex-ide-interrupt)
 (define-key codex-ide-session-mode-map (kbd "C-c RET") #'codex-ide-submit)
+(define-key codex-ide-session-mode-map (kbd "C-c C-a") #'codex-ide-agents)
 (define-key codex-ide-session-mode-map (kbd "C-c C-d") #'codex-ide-session-diff-open)
 (define-key codex-ide-session-mode-map (kbd "C-c C-k") #'codex-ide-interrupt)
 (define-key codex-ide-session-mode-map (kbd "C-c C-p") #'codex-ide-apply-config-preset)
@@ -744,6 +747,8 @@ Interactively, prompt for LEVEL.  LEVEL must be `standard' or `compact'."
 * \\<codex-ide-session-mode-map>\\[codex-ide-submit] submits the active prompt.
 
 * \\[codex-ide-interrupt] interrupts the current turn.
+
+* \\[codex-ide-agents] opens the global agents browser.
 
 * \\[codex-ide-session-diff-open] opens the session diff buffer.
 

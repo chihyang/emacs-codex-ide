@@ -37,6 +37,7 @@
   (let ((doc (documentation #'codex-ide-session-mode t)))
     (dolist (binding '("* \\<codex-ide-session-mode-map>\\[codex-ide-submit]"
                        "* \\[codex-ide-interrupt]"
+                       "* \\[codex-ide-agents]"
                        "* \\[codex-ide-session-diff-open]"
                        "* \\[codex-ide-apply-config-preset]"
                        "* \\[codex-ide-previous-prompt-line]"
@@ -51,6 +52,12 @@
     (codex-ide-session-mode)
     (should (eq (key-binding (kbd "C-c C-d"))
                 #'codex-ide-session-diff-open))))
+
+(ert-deftest codex-ide-session-mode-binds-agents-browser ()
+  (with-temp-buffer
+    (codex-ide-session-mode)
+    (should (eq (key-binding (kbd "C-c C-a"))
+                #'codex-ide-agents))))
 
 (ert-deftest codex-ide-session-mode-binds-apply-config-preset ()
   (with-temp-buffer

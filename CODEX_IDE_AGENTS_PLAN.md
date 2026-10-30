@@ -19,6 +19,16 @@ Archive and unarchive actions were added after this milestone. Remote
 app-server support and broader replacement of `codex-ide-status` remain
 deferred.
 
+The action workflow now combines mnemonic and generic marks. `m` and `%`
+produce `>`; `d`, `k`, `a`, and `r` produce `D`, `K`, `A`, and `R`. Capital
+`D`, `K`, `A`, or `R` performs its action on every generic `>` mark, or on the
+current row when no generic marks exist. Mnemonic marks do not affect that
+selection.
+Rename moved to `e`, automatic-refresh toggling moved to `t`, and `%` gained
+Title, Status, Running In, Updated, and Directory regexp marking commands.
+Lowercase `x` dispatches a mixed batch of mnemonic marks while ignoring and
+preserving generic `>` marks.
+
 ## User-facing behavior
 
 ### Automatic updates
@@ -88,9 +98,10 @@ should kill the session buffer and clear the associated in-memory process and
 session state, while leaving the app-server thread available for later resume.
 
 - `k` marks the current row as `killing` for deferred execution.
-- `K` confirms, then immediately closes the session on the current row.
-- `X` executes all pending marks, dispatching each row according to whether it
-  is marked for closing or deletion.
+- `K` confirms, then closes all generic marks or, when none exist, the session
+  on the current row.
+- `x` executes all actionable pending marks, dispatching each row according to
+  its mnemonic marker and leaving generic marks unchanged.
 - `u` removes either kind of mark from the current row.
 - `U` clears all close and deletion marks.
 
@@ -105,7 +116,7 @@ operation.
 
 Before closing, confirm if the session has an active turn, pending approval,
 elicitation, or another state for which teardown could discard an interaction.
-For a batch `X`, the confirmation should summarize close and delete counts in
+For a batch `x`, the confirmation should summarize close and delete counts in
 one prompt. Declining must perform neither operation.
 
 Closing should reuse the existing session teardown path rather than manually
@@ -126,8 +137,9 @@ Keep the existing Dired-style controls:
 - `d` marks a row for deletion.
 - `u` removes the current row's close or deletion mark.
 - `U` clears all close and deletion marks.
-- `X` confirms once, then performs each marked close or deletion operation.
-- `D` confirms, then deletes the session on the current row.
+- `x` confirms once, then performs each mnemonic-marked operation.
+- `D` confirms, then deletes all generic marks or, when none exist, the
+  session on the current row.
 
 Change the deletion implementation to use the official app-server
 `thread/delete` request rather than deleting rollout files directly.
@@ -229,9 +241,9 @@ facilities.
 
 1. Add protocol helpers and lifecycle notification normalization.
 2. Convert the shared deletion path to server-confirmed `thread/delete` and
-   update the existing `D`/`X` workflow.
+   update the existing `D`/`x` workflow.
 3. Separate and verify the local teardown primitive, then add `k`/`K` and
-   mixed-operation `X` handling.
+   mixed-operation `x` handling.
 4. Add `c` using the selected row's directory and the existing new-session
    lifecycle.
 5. Add `r` using `thread/name/set`.
@@ -261,7 +273,7 @@ Add or update ERT coverage for the following behavior.
 - `c` uses the selected row's directory and rejects missing directories.
 - `r` seeds the prompt, rejects an empty name, refreshes after success, and
   preserves the old row after failure.
-- `d`, `k`, `u`, `U`, `X`, `D`, and `K` use the documented mark and
+- `d`, `k`, `u`, `U`, `x`, `D`, and `K` use the documented mark and
   confirmation semantics.
 - `d` and `k` replace one another's mark rather than stacking operations on a
   row.
@@ -270,7 +282,7 @@ Add or update ERT coverage for the following behavior.
 - `K` rejects rows that are not backed by a live session in this Emacs
   instance.
 - Declining `K` confirmation leaves the local session unchanged.
-- A mixed `X` confirmation reports separate close and delete counts and
+- A mixed `x` confirmation reports separate close and delete counts and
   dispatches each marked row to the correct operation.
 - A close failure retains the row and mark while allowing other marked
   operations to proceed.
@@ -309,9 +321,9 @@ The milestone is complete when:
 - `c` reliably creates a normal Codex session in the selected row's directory;
 - `r` renames the selected session through the app server and shows external
   renames;
-- `k`, `K`, and `X` close only live sessions owned by this Emacs instance,
+- `k`, `K`, and `x` close only live sessions owned by this Emacs instance,
   clear their local state, and leave their threads resumable;
-- `D` and `X` use confirmed, server-authoritative deletion and never remove
+- `D` and `x` use confirmed, server-authoritative deletion and never remove
   local state after a failed request;
 - partial batch deletion is accurately represented and recoverable;
 - interactive state is preserved across automatic refreshes;

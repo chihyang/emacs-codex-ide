@@ -109,6 +109,7 @@ Key bindings:
 
 - `C-c RET` submits the active prompt.
 - `C-c C-c` or `C-c C-k` interrupts the current response.
+- `C-c C-a` opens the global agents browser.
 - `C-c C-d` opens the session diff buffer.
 - `C-M-p` and `C-M-n` move between prompt lines.
 - `M-p` and `M-n` cycle prompt history while point is in the active prompt.
@@ -118,21 +119,23 @@ Type `/agents` at the active prompt to open the global agents browser. The same
 browser is available as `M-x codex-ide-agents` and from the main menu. Archived
 sessions appear alongside active sessions with `Archived` in the Status column.
 In the agents list, `RET` opens or resumes a session, `i` opens its detail view, and
-`r` renames it through the Codex app server. `c` starts a new session in the
+`e` renames it through the Codex app server. `c` starts a new session in the
 selected row's working directory. While the agents buffer is visible, local
 session events and a five-second fallback timer update it automatically;
 `g` remains available for an immediate manual refresh. Customize
 `codex-ide-agents-auto-refresh-interval` to change or disable timer polling,
-or press `A` to toggle all automatic refreshes for the current agents buffer.
-Session operations follow Dired conventions. `k` marks a session running in
-this Emacs for closing, `d` marks one for deletion, `a` marks an active session
-for archiving, and `R` marks an archived session for restoring. `u` removes
-one mark, `U` clears all marks, and `X` confirms and performs the marked
-operations. `K` confirms and closes the local session at point without
-deleting its resumable thread. `D` confirms and deletes the session at point
-through the official app-server API. A rejected deletion leaves its row, mark,
-and any local session buffer unchanged. Operation failures open a buffer with
-the error and a recovery tip.
+or press `t` to toggle all automatic refreshes for the current agents buffer.
+Session operations use `ibuffer`-style marks. `m` uses the generic `>` marker;
+`d`, `k`, `a`, and `r` use the mnemonic `D`, `K`, `A`, and `R` markers.
+Capital `D`, `K`, `A`, and `R` respectively delete, close, archive, or restore
+all generic `>` marks after confirmation; if there are no generic marks, they
+act on the current row. `u` removes one mark and `U` clears all marks. `% t`,
+`% s`, `% r`, `% u`, and `% d` add generic
+`>` marks by a case-insensitive regexp over the full Title, Status, Running In,
+Updated, or Directory value. `x` dispatches all mnemonic marks in one confirmed
+batch. Generic `>` marks are ignored and remain marked. Successful action rows
+lose their marks; failed rows retain their original marker and appear in the
+operation error buffer with a recovery tip.
 The detail view uses clickable parent and subagent names; `^` moves to the
 parent and `o` opens or resumes the displayed session.
 

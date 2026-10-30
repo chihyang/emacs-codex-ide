@@ -38,10 +38,10 @@ Key behavior:
   external daemon activity every five seconds while visible. `g` still
   performs an immediate manual refresh.
 - Automatic and manual refreshes preserve the selected session, sort order,
-  scroll position, and close or deletion marks for rows that still exist.
+  scroll position, and marks for rows that still exist.
 - `codex-ide-agents-auto-refresh-interval` customizes fallback polling; nil or
   a non-positive value disables polling without disabling event refreshes.
-- `A` toggles all automatic updates for the current agents buffer while
+- `t` toggles all automatic updates for the current agents buffer while
   retaining manual `g`; the mode line reports when automatic refresh is off.
 - Background failures retain the last good rows and show a mode-line warning
   instead of repeatedly opening an error buffer.
@@ -52,18 +52,22 @@ Key behavior:
 - `c` creates a new session in the selected row's working directory through
   the normal Codex session lifecycle and window policy. Missing or inaccessible
   directories are rejected before session startup.
-- `r` prompts for a non-empty explicit session name and renames the selected
+- `e` prompts for a non-empty explicit session name and renames the selected
   thread through the app server. Failures leave the displayed name unchanged
   and open `*Codex Agents Operation*` with recovery guidance.
-- `k` marks a session running in this Emacs for local closing, and `K` confirms
-  and immediately closes the session at point. Closing kills its Emacs buffer
-  and clears local lifecycle state while leaving the thread resumable.
-- `d` marks a session for deletion, `a` marks an active session for archiving,
-  and `R` marks an archived session for restoring. `u` removes one mark and
-  `U` clears all marks. `X` confirms once and dispatches mixed operations;
-  `D` confirms and deletes the session at point. Successful operations refresh
-  the list, while failures retain their marks and show the error and a recovery
+- `m` places a generic `>` mark on the current row. `d`, `k`, `a`, and `r`
+  place mnemonic `D`, `K`, `A`, and `R` marks. `u` removes one mark and `U`
+  clears all marks.
+- `D`, `K`, `A`, and `R` confirm and apply deletion, local close, archive, or
+  restore to all generic `>` marks, falling back to the current row when there
+  are no generic marks. Mnemonic marks do not affect their target selection.
+- `x` confirms and dispatches every mnemonic mark as a mixed batch. Generic
+  `>` marks are ignored and remain marked. Successful action rows lose their
+  marks; failures retain their original marker and show an error and recovery
   tip in `*Codex Agents Operation*`.
+- `% t`, `% s`, `% r`, `% u`, and `% d` add generic `>` marks by a
+  case-insensitive regexp over the full Title, Status, Running In, Updated, or
+  Directory value.
 - Archive and restore use the app-server's `thread/archive` and
   `thread/unarchive` requests. Archiving may also archive spawned descendants.
 - Deletion uses the official `thread/delete` app-server request. Local buffers
@@ -210,10 +214,10 @@ local buffer displays `External`.
   - Width-stable truncation for long session titles.
   - Raw timestamp ordering for the sortable `Updated` column.
   - `i` dispatching the selected row to the detail view.
-  - `r` seeding the current explicit name, rejecting empty names, sending the
+  - `e` seeding the current explicit name, rejecting empty names, sending the
     rename request, refreshing on success, and reporting failure.
-  - `k`/`K` local-session checks, close and deletion mark replacement, mixed
-    `X` dispatch, cancellation, refresh, and failure mark retention.
+  - Generic marking, per-column regexp marking, capital action dispatch,
+    cancellation, refresh, and failure mark retention.
   - `c` using the selected row's directory, rejecting unavailable directories,
     and reporting startup failures.
   - State preservation across refreshes, event coalescing, visible-buffer
@@ -268,6 +272,9 @@ local buffer displays `External`.
 - Focused deletion, protocol, and agents tests after switching to
   app-server-backed deletion: `45/45` passed.
 - Focused core notification and deletion regression suite: `254/254` passed.
+- Focused agents and protocol tests after generic, mnemonic, and per-column
+  marking, ibuffer-style capital actions, and mixed `x` dispatch: `54/54`
+  passed.
 - Byte compilation passed for the modified runtime files:
   - `codex-ide-agent-detail.el`
   - `codex-ide-agents.el`
@@ -292,6 +299,9 @@ local buffer displays `External`.
   passed; the sole failure remains the same unrelated MCP bridge fixture.
 - Full non-integration suite after external name notifications: `775/776`
   passed; the sole failure remains the same unrelated MCP bridge fixture.
+- Full non-integration suite after generic, mnemonic, and per-column marking:
+  `786/787` passed; the sole failure remains the same unrelated MCP bridge
+  fixture.
 - Modified runtime files were successfully reloaded into the running Emacs
   session with `bin/elisp-reload.sh`.
 - `git diff --check` passes and no generated `.elc` files remain.
@@ -328,7 +338,7 @@ No integration tests were run, in accordance with `AGENTS.md`.
 
 ## Deferred follow-up
 
-- A `%` filter for list columns.
+- Persistent filtering or grouping for very large session lists.
 - Remote app-server support.
 - Replacing or redirecting `codex-ide-status` once the agents interface is a
   complete successor.
