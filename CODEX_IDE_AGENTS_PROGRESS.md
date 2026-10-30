@@ -129,6 +129,8 @@ The new `codex-ide-agents.el` module contains:
   agents and project status interfaces without direct rollout-file removal.
 - `thread/deleted` notification normalization into the shared session-event
   hook, including notifications received by query-only connections.
+- `thread/name/updated` notification normalization through the same event
+  path, so external renames schedule the existing coalesced agents refresh.
 - Buffer-local session-event and fallback timers that coalesce automatic
   updates, refresh only while the agents list is visible, and are removed when
   the buffer is killed or changes mode.
@@ -241,6 +243,7 @@ local buffer displays `External`.
     session's thread association, while the intended new session still accepts
     it.
   - Query-only connections normalize `thread/deleted` into a session event.
+  - Query-only connections normalize `thread/name/updated` into a session event.
 - `tests/codex-ide-transient-tests.el`
   - The main menu exposes the new agents command.
 
@@ -255,6 +258,8 @@ local buffer displays `External`.
 - Focused agents tests after adding automatic refresh: `33/33` passed.
 - Focused agents tests after adding the refresh toggle and per-window point
   preservation: `36/36` passed.
+- Focused core and agents tests after adding external name notifications:
+  `291/291` passed.
 - Focused deletion, protocol, and agents tests after switching to
   app-server-backed deletion: `45/45` passed.
 - Focused core notification and deletion regression suite: `254/254` passed.
@@ -279,6 +284,8 @@ local buffer displays `External`.
 - Full non-integration suite after app-server-backed deletion: `771/772`
   passed; the sole failure remains the same unrelated MCP bridge fixture.
 - Full non-integration suite after the cursor-preservation fix: `774/775`
+  passed; the sole failure remains the same unrelated MCP bridge fixture.
+- Full non-integration suite after external name notifications: `775/776`
   passed; the sole failure remains the same unrelated MCP bridge fixture.
 - Modified runtime files were successfully reloaded into the running Emacs
   session with `bin/elisp-reload.sh`.

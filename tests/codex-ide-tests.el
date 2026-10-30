@@ -7810,6 +7810,23 @@
                          session
                          '(:thread-id "thread-deleted"))))))))))
 
+(ert-deftest codex-ide-thread-name-updated-notification-emits-query-session-event ()
+  (let ((project-dir (codex-ide-test--make-temp-project)) events)
+    (codex-ide-test-with-fixture project-dir
+      (codex-ide-test-with-fake-processes
+        (let ((session (codex-ide--create-query-session))
+              (codex-ide-session-event-hook
+               (list (lambda (event emitted-session payload)
+                       (push (list event emitted-session payload) events)))))
+          (codex-ide--handle-notification
+           session
+           '((method . "thread/name/updated")
+             (params . ((threadId . "thread-renamed")
+                        (threadName . "New name")))))
+          (should (equal events
+                         (list (list 'thread-name-updated session
+                                     '(:thread-id "thread-renamed"))))))))))
+
 (ert-deftest codex-ide-ignores-notifications-for-other-threads ()
   (with-temp-buffer
     (codex-ide-session-mode)

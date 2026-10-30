@@ -707,6 +707,7 @@
                  (lambda (value) (eq value 'agents-refresh-timer))))
         (codex-ide-agents--handle-session-event 'status-changed nil nil)
         (codex-ide-agents--handle-session-event 'turn-started nil nil)
+        (codex-ide-agents--handle-session-event 'thread-name-updated nil nil)
         (codex-ide-agents--handle-session-event 'unrelated nil nil))
       (should (= scheduled 1)))))
 

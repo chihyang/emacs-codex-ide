@@ -89,6 +89,7 @@ events can still schedule automatic refreshes when polling is disabled."
 (defconst codex-ide-agents--session-events
   '(created destroyed thread-attached status-changed turn-started
             turn-completed approval-requested reset thread-deleted
+            thread-name-updated
             config-changed)
   "Session events that should schedule an agents list refresh.")
 
