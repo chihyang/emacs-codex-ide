@@ -30,6 +30,7 @@
 (set-keymap-parent codex-ide-agents-mode-map codex-ide-session-list-mode-map)
 (define-key codex-ide-agents-mode-map (kbd "l") #'codex-ide-agents-refresh)
 (define-key codex-ide-agents-mode-map (kbd "i") #'codex-ide-agents-detail)
+(define-key codex-ide-agents-mode-map (kbd "r") #'codex-ide-agents-rename)
 (define-key codex-ide-agents-mode-map (kbd "d") #'codex-ide-agents-mark-delete)
 (define-key codex-ide-agents-mode-map (kbd "u") #'codex-ide-agents-unmark)
 (define-key codex-ide-agents-mode-map (kbd "U") #'codex-ide-agents-unmark-all)
@@ -182,6 +183,64 @@ LEFT and RIGHT are tabulated-list entries whose thread metadata is stored in
                       (gethash thread-id codex-ide-agents--threads-by-id))))
     (or thread (user-error "No Codex agent session at point"))))
 
+(defun codex-ide-agents--show-operation-failures (operation failures tip)
+  "Show OPERATION FAILURES and recovery TIP.
+FAILURES is a list of (THREAD-ID . ERROR-DATA)."
+  (let ((buffer (get-buffer-create "*Codex Agents Operation*")))
+    (with-current-buffer buffer
+      (let ((inhibit-read-only t))
+        (erase-buffer)
+        (insert (format "Codex session %s failed\n\n" operation))
+        (dolist (failure failures)
+          (insert "Thread: " (car failure) "\n"
+                  "Error: " (error-message-string (cdr failure)) "\n\n"))
+        (insert "Tip: " tip "\n")
+        (special-mode)))
+    (display-buffer buffer)))
+
+(defun codex-ide-agents-rename ()
+  "Prompt for and set the explicit name of the Codex session at point."
+  (interactive)
+  (let* ((thread (codex-ide-agents--thread-at-point))
+         (thread-id (alist-get 'id thread))
+         (current-name (alist-get 'name thread))
+         (name
+          (string-trim
+           (read-string
+            "Rename Codex session: "
+            (if (stringp current-name) current-name "")))))
+    (when (string-empty-p name)
+      (user-error "Codex session name cannot be empty"))
+    (let (renamed)
+      (condition-case err
+          (progn
+            (codex-ide--prepare-session-operations)
+            (codex-ide--set-thread-name
+             (codex-ide--ensure-query-session-for-thread-selection
+              codex-ide-agents--query-directory)
+             thread-id
+             name)
+            (setq renamed t))
+        (error
+         (codex-ide-agents--show-operation-failures
+          "rename"
+          (list (cons thread-id err))
+          (concat
+           "Refresh the agents list with l, verify that the thread still "
+           "exists, and retry the rename."))))
+      (when renamed
+        (condition-case err
+            (progn
+              (codex-ide-agents-refresh)
+              (message "Renamed Codex session to %s" name))
+          (error
+           (codex-ide-agents--show-operation-failures
+            "refresh after rename"
+            (list (cons thread-id err))
+            (concat
+             "The rename succeeded. Refresh the agents list with l to show "
+             "the new name."))))))))
+
 (defun codex-ide-agents-mark-delete ()
   "Mark the Codex session at point for deletion and advance one row."
   (interactive)
@@ -224,22 +283,6 @@ LEFT and RIGHT are tabulated-list entries whose thread metadata is stored in
         (forward-line 1)))
     (nreverse threads)))
 
-(defun codex-ide-agents--show-delete-failures (failures)
-  "Show deletion FAILURES as a list of (THREAD-ID . ERROR-DATA)."
-  (let ((buffer (get-buffer-create "*Codex Agents Operation*")))
-    (with-current-buffer buffer
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (insert "Codex session deletion failed\n\n")
-        (dolist (failure failures)
-          (insert "Thread: " (car failure) "\n"
-                  "Error: " (error-message-string (cdr failure)) "\n\n"))
-        (insert "Tip: Refresh the agents list with l and check whether each "
-                "thread still has a rollout file in CODEX_HOME/sessions. "
-                "Stop active work before retrying deletion.\n")
-        (special-mode)))
-    (display-buffer buffer)))
-
 (defun codex-ide-agents--delete-threads (threads)
   "Confirm and permanently delete THREADS, then refresh the agents list."
   (let ((count (length threads)))
@@ -262,7 +305,13 @@ LEFT and RIGHT are tabulated-list entries whose thread metadata is stored in
         (when deleted
           (codex-ide-agents-refresh))
         (when failures
-          (codex-ide-agents--show-delete-failures (nreverse failures)))))))
+          (codex-ide-agents--show-operation-failures
+           "deletion"
+           (nreverse failures)
+           (concat
+            "Refresh the agents list with l and check whether each thread "
+            "still has a rollout file in CODEX_HOME/sessions. Stop active "
+            "work before retrying deletion.")))))))
 
 (defun codex-ide-agents-execute-deletions ()
   "Confirm and permanently delete every session marked with `d'."

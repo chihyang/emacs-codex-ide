@@ -37,6 +37,9 @@ Key behavior:
 - `l` refreshes the list; standard tabulated-list refresh behavior remains
   available.
 - `i` opens the selected session in `*Codex Agent Details*`.
+- `r` prompts for a non-empty explicit session name and renames the selected
+  thread through the app server. Failures leave the displayed name unchanged
+  and open `*Codex Agents Operation*` with recovery guidance.
 - `d` marks a session for deletion, `u` removes one mark, `U` clears all marks,
   and `X` confirms and deletes marked sessions. `D` confirms and deletes the
   session at point.
@@ -95,6 +98,7 @@ The new `codex-ide-agents.el` module contains:
 - Global live-session lookup by thread ID so an already-open session is
   displayed instead of resumed into a duplicate buffer, even when the daemon's
   recorded directory differs from the Emacs session directory.
+- Session renaming through the official `thread/name/set` app-server method.
 
 ### Agent detail buffer
 
@@ -160,6 +164,8 @@ local buffer displays `External`.
   - Width-stable truncation for long session titles.
   - Raw timestamp ordering for the sortable `Updated` column.
   - `i` dispatching the selected row to the detail view.
+  - `r` seeding the current explicit name, rejecting empty names, sending the
+    rename request, refreshing on success, and reporting failure.
 - `tests/codex-ide-agent-detail-tests.el`
   - Metadata, parent, and direct subagent rendering.
   - In-place child navigation.
@@ -185,6 +191,7 @@ local buffer displays `External`.
 - Focused detail, agents, protocol, and slash-command tests: `39/39` passed.
 - Focused agents tests after adding Dired-style deletion controls: `13/13`
   passed.
+- Focused protocol and agents tests after adding rename: `21/21` passed.
 - Byte compilation passed for the modified runtime files:
   - `codex-ide-agent-detail.el`
   - `codex-ide-agents.el`
@@ -197,7 +204,7 @@ local buffer displays `External`.
   - `codex-ide-status-mode.el`
   - `codex-ide-threads.el`
   - `codex-ide-transient.el`
-- Full non-integration suite after adding deletion: `742/743` passed.
+- Full non-integration suite after adding rename: `748/749` passed.
 - Modified runtime files were successfully reloaded into the running Emacs
   session with `bin/elisp-reload.sh`.
 - `git diff --check` passes and no generated `.elc` files remain.
@@ -233,7 +240,7 @@ No integration tests were run, in accordance with `AGENTS.md`.
 ## Deferred follow-up
 
 - Automatic refresh for external daemon activity.
-- Rename, archive, and unarchive actions.
+- Archive and unarchive actions.
 - Remote app-server support.
 - Replacing or redirecting `codex-ide-status` once the agents interface is a
   complete successor.

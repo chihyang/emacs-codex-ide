@@ -130,6 +130,8 @@
               #'codex-ide-agents-refresh))
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "i"))
               #'codex-ide-agents-detail))
+  (should (eq (lookup-key codex-ide-agents-mode-map (kbd "r"))
+              #'codex-ide-agents-rename))
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "d"))
               #'codex-ide-agents-mark-delete))
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "u"))
@@ -148,7 +150,9 @@
      (codex-ide-agents-mode)
      (let ((thread (codex-ide-agents-test--thread
                     "thread-delete" "/tmp/project" "Delete me" "notLoaded" 20)))
-       (setq-local codex-ide-agents--threads-by-id (make-hash-table :test #'equal))
+       (setq-local codex-ide-agents--query-directory "/tmp/query/"
+                   codex-ide-agents--threads-by-id
+                   (make-hash-table :test #'equal))
        (puthash "thread-delete" thread codex-ide-agents--threads-by-id)
        (setq tabulated-list-format [("Session" 15 t)]
              tabulated-list-padding 2
@@ -161,6 +165,72 @@
        (search-forward "Delete me")
        (beginning-of-line)
        ,@body)))
+
+(ert-deftest codex-ide-agents-rename-seeds-name-requests-and-refreshes ()
+  (let (initial-input request refreshed)
+    (codex-ide-agents-test--with-selected-row
+      (cl-letf (((symbol-function 'read-string)
+                 (lambda (_prompt initial &rest _)
+                   (setq initial-input initial)
+                   "Renamed session"))
+                ((symbol-function 'codex-ide--prepare-session-operations)
+                 #'ignore)
+                ((symbol-function 'codex-ide--ensure-query-session-for-thread-selection)
+                 (lambda (directory)
+                   (should (equal directory "/tmp/query/"))
+                   'query-session))
+                ((symbol-function 'codex-ide--set-thread-name)
+                 (lambda (session thread-id name)
+                   (setq request (list session thread-id name))))
+                ((symbol-function 'codex-ide-agents-refresh)
+                 (lambda (&rest _) (setq refreshed t))))
+        (codex-ide-agents-rename)))
+    (should (equal initial-input "Delete me"))
+    (should (equal request
+                   '(query-session "thread-delete" "Renamed session")))
+    (should refreshed)))
+
+(ert-deftest codex-ide-agents-rename-rejects-empty-name-before-request ()
+  (let (prepared requested)
+    (codex-ide-agents-test--with-selected-row
+      (cl-letf (((symbol-function 'read-string)
+                 (lambda (&rest _) "   "))
+                ((symbol-function 'codex-ide--prepare-session-operations)
+                 (lambda () (setq prepared t)))
+                ((symbol-function 'codex-ide--set-thread-name)
+                 (lambda (&rest _) (setq requested t))))
+        (should-error (codex-ide-agents-rename) :type 'user-error)))
+    (should-not prepared)
+    (should-not requested)))
+
+(ert-deftest codex-ide-agents-rename-failure-shows-error-without-refresh ()
+  (let (refreshed shown)
+    (unwind-protect
+        (progn
+          (codex-ide-agents-test--with-selected-row
+            (cl-letf (((symbol-function 'read-string)
+                       (lambda (&rest _) "Renamed session"))
+                      ((symbol-function 'codex-ide--prepare-session-operations)
+                       #'ignore)
+                      ((symbol-function 'codex-ide--ensure-query-session-for-thread-selection)
+                       (lambda (&rest _) 'query-session))
+                      ((symbol-function 'codex-ide--set-thread-name)
+                       (lambda (&rest _) (error "rename rejected")))
+                      ((symbol-function 'codex-ide-agents-refresh)
+                       (lambda (&rest _) (setq refreshed t)))
+                      ((symbol-function 'display-buffer)
+                       (lambda (buffer &rest _) (setq shown buffer))))
+              (codex-ide-agents-rename)))
+          (should-not refreshed)
+          (should (buffer-live-p shown))
+          (with-current-buffer shown
+            (should (derived-mode-p 'special-mode))
+            (should (string-match-p "session rename failed" (buffer-string)))
+            (should (string-match-p "thread-delete" (buffer-string)))
+            (should (string-match-p "rename rejected" (buffer-string)))
+            (should (string-match-p "Tip:" (buffer-string)))))
+      (when (buffer-live-p shown)
+        (kill-buffer shown)))))
 
 (ert-deftest codex-ide-agents-mark-and-unmark-delete-without-deleting ()
   (let (deleted)

@@ -11,6 +11,31 @@
 (require 'codex-ide-test-fixtures)
 (require 'codex-ide)
 
+(ert-deftest codex-ide-set-thread-name-sends-official-request ()
+  (let ((request nil))
+    (cl-letf (((symbol-function 'codex-ide--request-sync)
+               (lambda (session method params)
+                 (setq request (list session method params))
+                 '((threadName . "New name")))))
+      (should
+       (equal (codex-ide--set-thread-name
+               'query-session "thread-1" "New name")
+              '((threadName . "New name"))))
+      (should
+       (equal request
+              '(query-session
+                "thread/name/set"
+                ((threadId . "thread-1")
+                 (name . "New name"))))))))
+
+(ert-deftest codex-ide-set-thread-name-rejects-empty-values ()
+  (should-error
+   (codex-ide--set-thread-name 'query-session "" "New name")
+   :type 'error)
+  (should-error
+   (codex-ide--set-thread-name 'query-session "thread-1" "")
+   :type 'error))
+
 (ert-deftest codex-ide-list-threads-across-directories-omits-cwd-and-paginates ()
   (let ((project-dir (codex-ide-test--make-temp-project))
         (requests nil))
