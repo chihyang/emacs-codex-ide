@@ -118,18 +118,22 @@ Key bindings:
 Type `/agents` at the active prompt to open the global agents browser. The same
 browser is available as `M-x codex-ide-agents` and from the main menu. Archived
 sessions appear alongside active sessions with `Archived` in the Status column.
-In the agents list, `RET` opens or resumes a session, `i` opens its detail view, and
-`e` renames it through the Codex app server. `c` starts a new session in the
-selected row's working directory. While the agents buffer is visible, local
+In the agents list, `RET` opens or resumes a session, `i` opens its detail view,
+and `e` renames it through the Codex app server. `c` starts a new session in the
+selected row's working directory. `f` marks a session for forking and `F` forks
+generic marks, or the current row when none exist. A fork copies the complete
+stored conversation, stays in the same directory, and opens as a normal Codex
+session. While the agents buffer is visible, local
 session events and a five-second fallback timer update it automatically;
 `g` remains available for an immediate manual refresh. Customize
 `codex-ide-agents-auto-refresh-interval` to change or disable timer polling,
 or press `t` to toggle all automatic refreshes for the current agents buffer.
 Session operations use `ibuffer`-style marks. `m` uses the generic `>` marker;
-`d`, `k`, `a`, and `r` use the mnemonic `D`, `K`, `A`, and `R` markers.
-Capital `D`, `K`, `A`, and `R` respectively delete, close, archive, or restore
-all generic `>` marks after confirmation; if there are no generic marks, they
-act on the current row. `u` removes one mark and `U` clears all marks. `% t`,
+`d`, `k`, `a`, `r`, and `f` use the mnemonic `D`, `K`, `A`, `R`, and `F`
+markers. Capital `D`, `K`, `A`, `R`, and `F` respectively delete, close,
+archive, restore, or fork all generic `>` marks after confirmation; if there
+are no generic marks, they act on the current row. `u` removes one mark and
+`U` clears all marks. `% t`,
 `% s`, `% r`, `% u`, and `% d` add generic
 `>` marks by a case-insensitive regexp over the full Title, Status, Running In,
 Updated, or Directory value. `x` dispatches all mnemonic marks in one confirmed

@@ -77,6 +77,7 @@ events can still schedule automatic refreshes when polling is disabled."
 (set-keymap-parent codex-ide-agents-mode-map codex-ide-session-list-mode-map)
 (define-key codex-ide-agents-mode-map (kbd "i") #'codex-ide-agents-detail)
 (define-key codex-ide-agents-mode-map (kbd "c") #'codex-ide-agents-create)
+(define-key codex-ide-agents-mode-map (kbd "f") #'codex-ide-agents-mark-fork)
 (define-key codex-ide-agents-mode-map (kbd "e") #'codex-ide-agents-rename)
 (define-key codex-ide-agents-mode-map (kbd "m") #'codex-ide-agents-mark)
 (define-key codex-ide-agents-mode-map (kbd "k") #'codex-ide-agents-mark-close)
@@ -92,6 +93,7 @@ events can still schedule automatic refreshes when polling is disabled."
 (define-key codex-ide-agents-mode-map (kbd "D") #'codex-ide-agents-delete)
 (define-key codex-ide-agents-mode-map (kbd "A") #'codex-ide-agents-archive)
 (define-key codex-ide-agents-mode-map (kbd "R") #'codex-ide-agents-unarchive)
+(define-key codex-ide-agents-mode-map (kbd "F") #'codex-ide-agents-fork)
 (define-key codex-ide-agents-mode-map (kbd "t")
             #'codex-ide-agents-toggle-auto-refresh)
 (define-key codex-ide-agents-mode-map (kbd "%") codex-ide-agents-mark-by-map)
@@ -427,32 +429,41 @@ FAILURES is a list of (THREAD-ID . ERROR-DATA)."
         (special-mode)))
     (display-buffer buffer)))
 
+(defun codex-ide-agents--thread-directory (thread operation)
+  "Return THREAD's accessible directory for OPERATION.
+OPERATION is a user-facing verb used in error messages."
+  (let ((recorded-directory (alist-get 'cwd thread)))
+    (unless (and (stringp recorded-directory)
+                 (not (string-empty-p recorded-directory)))
+      (user-error "Cannot %s this Codex session; it has no working directory"
+                  operation))
+    (let ((directory (file-name-as-directory
+                      (expand-file-name recorded-directory))))
+      (unless (file-accessible-directory-p directory)
+        (user-error
+         "Cannot %s this Codex session; directory is unavailable: %s"
+         operation
+         (abbreviate-file-name directory)))
+      directory)))
+
 (defun codex-ide-agents-create ()
   "Create a new Codex session in the selected agent's directory."
   (interactive)
   (codex-ide-agents--with-interaction
     (let* ((thread (codex-ide-agents--thread-at-point))
            (thread-id (alist-get 'id thread))
-           (recorded-directory (alist-get 'cwd thread)))
-      (unless (and (stringp recorded-directory)
-                   (not (string-empty-p recorded-directory)))
-        (user-error "This Codex session has no working directory"))
-      (let ((directory (file-name-as-directory
-                        (expand-file-name recorded-directory))))
-        (unless (file-accessible-directory-p directory)
-          (user-error
-           "Cannot create a Codex session; directory is unavailable: %s"
-           (abbreviate-file-name directory)))
-        (condition-case err
-            (let ((default-directory directory))
-              (codex-ide))
-          (error
-           (codex-ide-agents--show-operation-failures
-            "creation"
-            (list (cons thread-id err))
-            (concat
-             "Verify that the directory and Codex app server are available, "
-             "then retry with c."))))))))
+           (directory
+            (codex-ide-agents--thread-directory thread "create from")))
+      (condition-case err
+          (let ((default-directory directory))
+            (codex-ide))
+        (error
+         (codex-ide-agents--show-operation-failures
+          "creation"
+          (list (cons thread-id err))
+          (concat
+           "Verify that the directory and Codex app server are available, "
+           "then retry with c.")))))))
 
 (defun codex-ide-agents-rename ()
   "Prompt for and set the explicit name of the Codex session at point."
@@ -528,6 +539,11 @@ FAILURES is a list of (THREAD-ID . ERROR-DATA)."
   (interactive)
   (codex-ide-agents--mark-with-character ?R))
 
+(defun codex-ide-agents-mark-fork ()
+  "Mark the Codex session at point with `F' and advance one row."
+  (interactive)
+  (codex-ide-agents--mark-with-character ?F))
+
 (defun codex-ide-agents-unmark ()
   "Remove the operation mark from the Codex session at point and advance."
   (interactive)
@@ -542,7 +558,7 @@ FAILURES is a list of (THREAD-ID . ERROR-DATA)."
       (while (not (eobp))
         (when (and (tabulated-list-get-id)
                    (memq (char-after (line-beginning-position))
-                         '(?> ?D ?K ?A ?R)))
+                         '(?> ?D ?K ?A ?R ?F)))
           (tabulated-list-put-tag " ")
           (setq count (1+ count)))
         (forward-line 1)))
@@ -574,7 +590,7 @@ FAILURES is a list of (THREAD-ID . ERROR-DATA)."
       (goto-char (point-min))
       (while (not (eobp))
         (when-let* (((memq (char-after (line-beginning-position))
-                            '(?> ?D ?K ?A ?R)))
+                            '(?> ?D ?K ?A ?R ?F)))
                     (row-id (tabulated-list-get-id))
                     (thread-id (car-safe row-id))
                     (thread (gethash thread-id codex-ide-agents--threads-by-id)))
@@ -601,7 +617,7 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
       (goto-char (point-min))
       (while (not (eobp))
         (when-let* ((mark (and (memq (char-after (line-beginning-position))
-                                      '(?> ?D ?K ?A ?R))
+                                      '(?> ?D ?K ?A ?R ?F))
                                 (char-after (line-beginning-position))))
                     (row-id (tabulated-list-get-id))
                     (thread-id (car-safe row-id)))
@@ -616,7 +632,8 @@ A generic `>' mark has no batch action."
     (?D 'delete)
     (?K 'close)
     (?A 'archive)
-    (?R 'unarchive)))
+    (?R 'unarchive)
+    (?F 'fork)))
 
 (defun codex-ide-agents--marked-actions (marks &optional generic-action)
   "Return action and thread pairs represented by MARKS.
@@ -794,7 +811,8 @@ LABEL is the user-facing column name."
     ('close "Close local")
     ('delete "Permanently delete")
     ('archive "Archive")
-    ('unarchive "Unarchive")))
+    ('unarchive "Unarchive")
+    ('fork "Fork")))
 
 (defun codex-ide-agents--confirm-action (kind threads)
   "Return non-nil when the user confirms KIND for THREADS."
@@ -832,6 +850,7 @@ LABEL is the user-facing column name."
             (delete-count 0)
             (archive-count 0)
             (unarchive-count 0)
+            (fork-count 0)
             close-threads)
         (dolist (action actions)
           (pcase (car action)
@@ -840,7 +859,8 @@ LABEL is the user-facing column name."
              (push (cdr action) close-threads))
             ('delete (setq delete-count (1+ delete-count)))
             ('archive (setq archive-count (1+ archive-count)))
-            ('unarchive (setq unarchive-count (1+ unarchive-count)))))
+            ('unarchive (setq unarchive-count (1+ unarchive-count)))
+            ('fork (setq fork-count (1+ fork-count)))))
         (let* ((summary
                 (string-join
                  (delq nil
@@ -851,7 +871,9 @@ LABEL is the user-facing column name."
                              (when (> archive-count 0)
                                (format "archive %d" archive-count))
                              (when (> unarchive-count 0)
-                               (format "unarchive %d" unarchive-count))))
+                               (format "unarchive %d" unarchive-count))
+                             (when (> fork-count 0)
+                               (format "fork %d" fork-count))))
                  " and "))
                (active-count
                 (codex-ide-agents--active-close-count close-threads))
@@ -872,11 +894,19 @@ LABEL is the user-facing column name."
                    prompt "; spawned descendants may also be archived")))
           (yes-or-no-p (concat prompt "? ")))))))
 
+(defun codex-ide-agents--operation-query-session (session)
+  "Return SESSION or prepare a query session for an agents operation."
+  (or session
+      (progn
+        (codex-ide--prepare-session-operations)
+        (codex-ide--ensure-query-session-for-thread-selection
+         codex-ide-agents--query-directory))))
+
 (defun codex-ide-agents--execute-actions (actions)
   "Confirm and execute ACTIONS, clearing marks only for successful rows."
   (codex-ide-agents--with-interaction
     (when (codex-ide-agents--confirm-actions actions)
-      (let (succeeded failures query-session)
+      (let (succeeded failures forks query-session)
         (dolist (action actions)
           (let* ((kind (car action))
                  (thread (cdr action))
@@ -889,23 +919,34 @@ LABEL is the user-facing column name."
                       ('archive
                        (when (alist-get 'archived thread)
                          (user-error "Session is already archived"))
-                       (unless query-session
-                         (codex-ide--prepare-session-operations)
-                         (setq query-session
-                               (codex-ide--ensure-query-session-for-thread-selection
-                                codex-ide-agents--query-directory)))
+                       (setq query-session
+                             (codex-ide-agents--operation-query-session
+                              query-session))
                        (codex-ide--set-thread-archived
                         query-session thread-id t))
                       ('unarchive
                        (unless (alist-get 'archived thread)
                          (user-error "Session is not archived"))
-                       (unless query-session
-                         (codex-ide--prepare-session-operations)
-                         (setq query-session
-                               (codex-ide--ensure-query-session-for-thread-selection
-                                codex-ide-agents--query-directory)))
+                       (setq query-session
+                             (codex-ide-agents--operation-query-session
+                              query-session))
                        (codex-ide--set-thread-archived
-                        query-session thread-id nil)))
+                        query-session thread-id nil))
+                      ('fork
+                       (let ((directory
+                              (codex-ide-agents--thread-directory
+                               thread "fork")))
+                         (setq query-session
+                               (codex-ide-agents--operation-query-session
+                                query-session))
+                         (let ((forked-id
+                                (codex-ide--extract-thread-id
+                                 (codex-ide--fork-thread
+                                  query-session thread-id))))
+                           (unless (and (stringp forked-id)
+                                        (not (string-empty-p forked-id)))
+                             (error "App server returned no forked thread id"))
+                           (push (cons forked-id directory) forks)))))
                     (push thread-id succeeded))
                 (error
                  (push
@@ -918,6 +959,15 @@ LABEL is the user-facing column name."
         (when succeeded
           (codex-ide-agents--clear-thread-marks succeeded)
           (codex-ide-agents-refresh))
+        (dolist (fork (nreverse forks))
+          (condition-case err
+              (codex-ide--show-or-resume-thread (car fork) (cdr fork))
+            (error
+             (push (cons (car fork)
+                         (list 'error
+                               (format "Opening fork failed: %s"
+                                       (error-message-string err))))
+                   failures))))
         (when failures
           (codex-ide-agents--show-operation-failures
            "marked operation"
@@ -945,7 +995,7 @@ Mnemonic marks are not selected by this command."
     (unless marks
       (user-error "No Codex agent sessions marked"))
     (unless actions
-      (user-error "No D, K, A, or R marks to execute"))
+      (user-error "No D, K, A, R, or F marks to execute"))
     (codex-ide-agents--execute-actions actions)))
 
 (defun codex-ide-agents-close ()
@@ -967,6 +1017,11 @@ Mnemonic marks are not selected by this command."
   "Confirm and restore generically marked sessions, or the session at point."
   (interactive)
   (codex-ide-agents--execute-current-action 'unarchive))
+
+(defun codex-ide-agents-fork ()
+  "Confirm and fork generically marked sessions, or the session at point."
+  (interactive)
+  (codex-ide-agents--execute-current-action 'fork))
 
 (defun codex-ide-agents-refresh (&optional _ignore-auto _noconfirm)
   "Refresh the global Codex agents list."

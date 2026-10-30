@@ -52,6 +52,25 @@
 (ert-deftest codex-ide-delete-thread-rejects-empty-id ()
   (should-error (codex-ide--delete-thread 'query-session "") :type 'error))
 
+(ert-deftest codex-ide-fork-thread-sends-official-request ()
+  (let (request)
+    (cl-letf (((symbol-function 'codex-ide--request-sync)
+               (lambda (session method params)
+                 (setq request (list session method params))
+                 '((thread . ((id . "forked-thread")))))))
+      (should
+       (equal (codex-ide--fork-thread 'query-session "source-thread")
+              '((thread . ((id . "forked-thread"))))))
+      (should
+       (equal request
+              '(query-session
+                "thread/fork"
+                ((threadId . "source-thread")
+                 (excludeTurns . t))))))))
+
+(ert-deftest codex-ide-fork-thread-rejects-empty-id ()
+  (should-error (codex-ide--fork-thread 'query-session "") :type 'error))
+
 (ert-deftest codex-ide-set-thread-archived-uses-official-methods ()
   (let (requests)
     (cl-letf (((symbol-function 'codex-ide--request-sync)

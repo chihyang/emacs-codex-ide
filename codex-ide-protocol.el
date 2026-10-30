@@ -256,6 +256,20 @@ NAME must be a non-empty string."
    "thread/delete"
    `((threadId . ,thread-id))))
 
+(defun codex-ide--fork-thread (&optional session thread-id)
+  "Fork THREAD-ID's complete stored history through SESSION."
+  (setq session (or session (codex-ide--get-default-session-for-current-buffer)))
+  (unless session
+    (error "No Codex session available"))
+  (unless (and (stringp thread-id)
+               (not (string-empty-p thread-id)))
+    (error "Invalid thread id: %S" thread-id))
+  (codex-ide--request-sync
+   session
+   "thread/fork"
+   `((threadId . ,thread-id)
+     (excludeTurns . t))))
+
 (defun codex-ide--set-thread-archived (&optional session thread-id archived)
   "Set THREAD-ID's archive state through SESSION.
 When ARCHIVED is non-nil, archive it; otherwise unarchive it."

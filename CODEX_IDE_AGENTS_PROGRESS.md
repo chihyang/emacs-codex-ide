@@ -55,12 +55,13 @@ Key behavior:
 - `e` prompts for a non-empty explicit session name and renames the selected
   thread through the app server. Failures leave the displayed name unchanged
   and open `*Codex Agents Operation*` with recovery guidance.
-- `m` places a generic `>` mark on the current row. `d`, `k`, `a`, and `r`
-  place mnemonic `D`, `K`, `A`, and `R` marks. `u` removes one mark and `U`
-  clears all marks.
-- `D`, `K`, `A`, and `R` confirm and apply deletion, local close, archive, or
-  restore to all generic `>` marks, falling back to the current row when there
-  are no generic marks. Mnemonic marks do not affect their target selection.
+- `m` places a generic `>` mark on the current row. `d`, `k`, `a`, `r`, and
+  `f` place mnemonic `D`, `K`, `A`, `R`, and `F` marks. `u` removes one mark
+  and `U` clears all marks.
+- `D`, `K`, `A`, `R`, and `F` confirm and apply deletion, local close, archive,
+  restore, or fork to all generic `>` marks, falling back to the current row
+  when there are no generic marks. Mnemonic marks do not affect their target
+  selection.
 - `x` confirms and dispatches every mnemonic mark as a mixed batch. Generic
   `>` marks are ignored and remain marked. Successful action rows lose their
   marks; failures retain their original marker and show an error and recovery
@@ -70,6 +71,8 @@ Key behavior:
   Directory value.
 - Archive and restore use the app-server's `thread/archive` and
   `thread/unarchive` requests. Archiving may also archive spawned descendants.
+- Fork uses `thread/fork` with paginated history excluded from the response,
+  then opens the new persistent thread in the source session's directory.
 - Deletion uses the official `thread/delete` app-server request. Local buffers
   and lifecycle state are closed only after server confirmation; rejection is
   non-destructive, and unsupported servers receive upgrade guidance rather
@@ -136,6 +139,7 @@ The new `codex-ide-agents.el` module contains:
   `codex-ide` entry point.
 - Shared server-authoritative deletion through `thread/delete`, reused by the
   agents and project status interfaces without direct rollout-file removal.
+- Persistent full-history forking through `thread/fork`.
 - `thread/deleted` notification normalization into the shared session-event
   hook, including notifications received by query-only connections.
 - `thread/name/updated` notification normalization through the same event
@@ -275,6 +279,8 @@ local buffer displays `External`.
 - Focused agents and protocol tests after generic, mnemonic, and per-column
   marking, ibuffer-style capital actions, and mixed `x` dispatch: `54/54`
   passed.
+- Focused agents and protocol tests after adding `F` fork marks and mixed-batch
+  fork execution: `57/57` passed.
 - Byte compilation passed for the modified runtime files:
   - `codex-ide-agent-detail.el`
   - `codex-ide-agents.el`
@@ -302,6 +308,8 @@ local buffer displays `External`.
 - Full non-integration suite after generic, mnemonic, and per-column marking:
   `786/787` passed; the sole failure remains the same unrelated MCP bridge
   fixture.
+- Full non-integration suite after conversation forking: `790/791` passed; the
+  sole failure remains the same unrelated MCP bridge fixture.
 - Modified runtime files were successfully reloaded into the running Emacs
   session with `bin/elisp-reload.sh`.
 - `git diff --check` passes and no generated `.elc` files remain.
@@ -338,7 +346,6 @@ No integration tests were run, in accordance with `AGENTS.md`.
 
 ## Deferred follow-up
 
-- Persistent filtering or grouping for very large session lists.
 - Remote app-server support.
 - Replacing or redirecting `codex-ide-status` once the agents interface is a
   complete successor.

@@ -20,10 +20,10 @@ app-server support and broader replacement of `codex-ide-status` remain
 deferred.
 
 The action workflow now combines mnemonic and generic marks. `m` and `%`
-produce `>`; `d`, `k`, `a`, and `r` produce `D`, `K`, `A`, and `R`. Capital
-`D`, `K`, `A`, or `R` performs its action on every generic `>` mark, or on the
-current row when no generic marks exist. Mnemonic marks do not affect that
-selection.
+produce `>`; `d`, `k`, `a`, `r`, and `f` produce `D`, `K`, `A`, `R`, and `F`.
+Capital `D`, `K`, `A`, `R`, or `F` performs its action on every generic `>`
+mark, or on the current row when no generic marks exist. Mnemonic marks do not
+affect that selection, and `x` includes fork marks in mixed batches.
 Rename moved to `e`, automatic-refresh toggling moved to `t`, and `%` gained
 Title, Status, Running In, Updated, and Directory regexp marking commands.
 Lowercase `x` dispatches a mixed batch of mnemonic marks while ignoring and
@@ -337,6 +337,6 @@ The milestone is complete when:
 
 - A deliberate UI for clearing an explicit session name.
 - Remote app-server support.
+- Branching from a specific earlier turn; the agents browser forks complete
+  stored history.
 - Final decision on replacing or redirecting `codex-ide-status`.
-- Additional filtering or grouping if automatic updates make very large agent
-  lists difficult to navigate.

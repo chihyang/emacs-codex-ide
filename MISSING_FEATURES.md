@@ -9,14 +9,14 @@ official Codex documentation as reviewed on 2026-10-22.
 | Status | Feature | Missing functionality |
 | --- | --- | --- |
 | TODO | Code review workflow | Add a dedicated review command with targets for uncommitted changes, a commit, a base branch, or custom review instructions. Review events can already be rendered, but `codex-ide` cannot initiate review mode. |
-| TODO | Conversation forks | Support forking the current or a stored thread, branching from an earlier prompt, and optionally placing the fork in a managed Git worktree. |
+| COMPLETE | Conversation forks | Fork a selected active or stored session's complete history from the global agents browser and open the new thread in the same directory. Branching from an earlier prompt remains optional follow-up work. |
 | TODO | Context compaction | Let users explicitly request conversation compaction. Compaction events are already rendered when the server initiates them. |
 | COMPLETE | Shared local app server | Connect through the shared managed Codex daemon instead of starting an independent app-server for every Emacs session. |
 | TODO | Remote app servers | Connect to remote WebSocket or Unix-socket app servers. |
 | COMPLETE | Global agent browser | Browse and resume sessions across all working directories, including their status, directory, and whether active work is running in this Emacs or externally. |
 | COMPLETE | Agent detail overview | Inspect session metadata from the global agents browser and navigate parent and direct subagent threads. |
 | TODO | Codex Cloud | Browse cloud tasks, select environments, submit tasks, inspect results and diffs, and apply cloud changes locally. |
-| TODO | Managed worktrees | Create, select, track, and clean up worktrees for new and forked sessions. |
+| NATIVE ALTERNATIVE | Managed worktrees | Use Magit for worktree lifecycle, then start or resume Codex in that directory. Codex-specific worktree management is intentionally out of scope. |
 
 ## Medium priority
 

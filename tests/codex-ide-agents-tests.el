@@ -160,6 +160,8 @@
               #'codex-ide-agents-detail))
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "c"))
               #'codex-ide-agents-create))
+  (should (eq (lookup-key codex-ide-agents-mode-map (kbd "f"))
+              #'codex-ide-agents-mark-fork))
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "e"))
               #'codex-ide-agents-rename))
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "m"))
@@ -187,6 +189,8 @@
               #'codex-ide-agents-archive))
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "R"))
               #'codex-ide-agents-unarchive))
+  (should (eq (lookup-key codex-ide-agents-mode-map (kbd "F"))
+              #'codex-ide-agents-fork))
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "t"))
               #'codex-ide-agents-toggle-auto-refresh))
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "% t"))
@@ -256,6 +260,40 @@
           (should (string-match-p "directory is unavailable"
                                   (error-message-string err))))))
     (should-not created)))
+
+(ert-deftest codex-ide-agents-x-forks-marked-session-and-opens-fork ()
+  (let ((directory (codex-ide-test--make-temp-project))
+        forked opened refreshed prompt)
+    (codex-ide-agents-test--with-selected-row
+      (setf (alist-get 'cwd
+                       (gethash "thread-delete"
+                                codex-ide-agents--threads-by-id))
+            directory)
+      (codex-ide-agents-mark-fork)
+      (forward-line -1)
+      (cl-letf (((symbol-function 'yes-or-no-p)
+                 (lambda (text) (setq prompt text) t))
+                ((symbol-function 'codex-ide--prepare-session-operations)
+                 #'ignore)
+                ((symbol-function
+                  'codex-ide--ensure-query-session-for-thread-selection)
+                 (lambda (&rest _) 'query-session))
+                ((symbol-function 'codex-ide--fork-thread)
+                 (lambda (session thread-id)
+                   (setq forked (list session thread-id))
+                   '((thread . ((id . "forked-thread"))))))
+                ((symbol-function 'codex-ide-agents-refresh)
+                 (lambda (&rest _) (setq refreshed t)))
+                ((symbol-function 'codex-ide--show-or-resume-thread)
+                 (lambda (thread-id thread-directory)
+                   (setq opened (cons thread-id thread-directory)))))
+        (codex-ide-agents-execute-marks))
+      (should (eq (char-after (line-beginning-position)) ?\s)))
+    (should (equal forked '(query-session "thread-delete")))
+    (should (equal opened
+                   (cons "forked-thread" (file-name-as-directory directory))))
+    (should refreshed)
+    (should (string-match-p "Fork Codex session Delete me" prompt))))
 
 (ert-deftest codex-ide-agents-create-rejects-row-without-directory ()
   (let (created)
@@ -380,13 +418,14 @@
     (dolist (case '((codex-ide-agents-mark-delete . ?D)
                     (codex-ide-agents-mark-close . ?K)
                     (codex-ide-agents-mark-archive . ?A)
-                    (codex-ide-agents-mark-unarchive . ?R)))
+                    (codex-ide-agents-mark-unarchive . ?R)
+                    (codex-ide-agents-mark-fork . ?F)))
       (funcall (car case))
       (forward-line -1)
       (should (eq (char-after (line-beginning-position)) (cdr case)))))
   (should (equal (mapcar #'codex-ide-agents--action-for-mark
-                         '(?> ?D ?K ?A ?R))
-                 '(nil delete close archive unarchive))))
+                         '(?> ?D ?K ?A ?R ?F))
+                 '(nil delete close archive unarchive fork))))
 
 (ert-deftest codex-ide-agents-x-ignores-generic-only-marks ()
   (let (confirmed)
@@ -398,7 +437,7 @@
         (let ((err (should-error
                     (codex-ide-agents-execute-marks)
                     :type 'user-error)))
-          (should (string-match-p "No D, K, A, or R marks"
+          (should (string-match-p "No D, K, A, R, or F marks"
                                   (error-message-string err)))))
       (should (eq (char-after (line-beginning-position)) ?>)))
     (should-not confirmed)))
