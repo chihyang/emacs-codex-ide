@@ -34,8 +34,15 @@ Key behavior:
   the session window.
 - `M-RET` and `C-M-j` perform the same action in another window through the
   shared session-list bindings.
-- `l` refreshes the list; standard tabulated-list refresh behavior remains
-  available.
+- The list automatically refreshes after local session events and reconciles
+  external daemon activity every five seconds while visible. `l` still
+  performs an immediate manual refresh.
+- Automatic and manual refreshes preserve the selected session, sort order,
+  scroll position, and close or deletion marks for rows that still exist.
+- `codex-ide-agents-auto-refresh-interval` customizes fallback polling; nil or
+  a non-positive value disables polling without disabling event refreshes.
+- Background failures retain the last good rows and show a mode-line warning
+  instead of repeatedly opening an error buffer.
 - `i` opens the selected session in `*Codex Agent Details*`.
 - `c` creates a new session in the selected row's working directory through
   the normal Codex session lifecycle and window policy. Missing or inaccessible
@@ -109,6 +116,11 @@ The new `codex-ide-agents.el` module contains:
   deleting the stored app-server thread.
 - New-session creation in a selected row's directory through the existing
   `codex-ide` entry point.
+- Buffer-local session-event and fallback timers that coalesce automatic
+  updates, refresh only while the agents list is visible, and are removed when
+  the buffer is killed or changes mode.
+- One state-preserving refresh path shared by manual and automatic updates,
+  with background errors reported unobtrusively in the mode line.
 - Shared-daemon notification routing recognizes thread IDs nested in
   `thread/started` payloads. Starting another session therefore cannot overwrite
   an existing buffer's thread association or make the agents browser resume a
@@ -184,6 +196,9 @@ local buffer displays `External`.
     `X` dispatch, cancellation, refresh, and failure mark retention.
   - `c` using the selected row's directory, rejecting unavailable directories,
     and reporting startup failures.
+  - State preservation across refreshes, event coalescing, visible-buffer
+    polling, interaction deferral, background failure handling, polling
+    disablement, and timer/hook cleanup.
 - `tests/codex-ide-agent-detail-tests.el`
   - Metadata, parent, and direct subagent rendering.
   - In-place child navigation.
@@ -217,6 +232,7 @@ local buffer displays `External`.
 - Focused protocol and agents tests after adding rename: `21/21` passed.
 - Focused agents and session tests after adding local close: `29/29` passed.
 - Focused agents tests after adding row-directory creation: `27/27` passed.
+- Focused agents tests after adding automatic refresh: `33/33` passed.
 - Byte compilation passed for the modified runtime files:
   - `codex-ide-agent-detail.el`
   - `codex-ide-agents.el`
@@ -233,6 +249,8 @@ local buffer displays `External`.
   notification routing: `279/279` passed.
 - Full non-integration suite after adding row-directory creation and the
   session-routing regression fix: `761/762` passed.
+- Full non-integration suite after adding automatic refresh: `767/768` passed;
+  the sole failure remains the unrelated MCP bridge fixture described below.
 - Modified runtime files were successfully reloaded into the running Emacs
   session with `bin/elisp-reload.sh`.
 - `git diff --check` passes and no generated `.elc` files remain.
@@ -263,11 +281,12 @@ No integration tests were run, in accordance with `AGENTS.md`.
    while an active terminal-only session displays `External`.
 5. Confirm `i` shows live metadata and parent/subagent navigation against the
    shared daemon.
-6. Review the final diff and commit only after explicit user approval.
+6. Confirm local and external activity updates the visible list without `l`,
+   and that selection and marks survive those updates.
+7. Review the final diff and commit only after explicit user approval.
 
 ## Deferred follow-up
 
-- Automatic refresh for external daemon activity.
 - Archive and unarchive actions.
 - Remote app-server support.
 - Replacing or redirecting `codex-ide-status` once the agents interface is a

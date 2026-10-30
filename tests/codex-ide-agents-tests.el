@@ -595,6 +595,124 @@
       (should (codex-ide-agents--updated-less-p older-entry newer-entry))
       (should-not (codex-ide-agents--updated-less-p newer-entry older-entry)))))
 
+(ert-deftest codex-ide-agents-refresh-preserves-selection-sort-and-marks ()
+  (with-temp-buffer
+    (let ((codex-ide-agents-auto-refresh-interval nil))
+      (codex-ide-agents-mode))
+    (setq-local codex-ide-agents--query-directory "/tmp/query/")
+    (let ((entries
+           (list (list (cons "thread-a" "/tmp/a") (vector "Alpha"))
+                 (list (cons "thread-b" "/tmp/b") (vector "Beta")))))
+      (setq tabulated-list-format [("Session" 15 t)]
+            tabulated-list-padding 2
+            tabulated-list-sort-key '("Session" . nil)
+            tabulated-list-entries entries)
+      (tabulated-list-init-header)
+      (tabulated-list-print)
+      (goto-char (point-min))
+      (search-forward "Alpha")
+      (beginning-of-line)
+      (tabulated-list-put-tag "D")
+      (search-forward "Beta")
+      (beginning-of-line)
+      (setq tabulated-list-entries (lambda () (reverse entries)))
+      (codex-ide-agents-refresh)
+      (should (equal (car-safe (tabulated-list-get-id)) "thread-b"))
+      (should (equal tabulated-list-sort-key '("Session" . nil)))
+      (goto-char (point-min))
+      (search-forward "Alpha")
+      (beginning-of-line)
+      (should (eq (char-after (line-beginning-position)) ?D)))))
+
+(ert-deftest codex-ide-agents-session-events-coalesce-refreshes ()
+  (with-temp-buffer
+    (let ((codex-ide-agents-auto-refresh-interval nil))
+      (codex-ide-agents-mode))
+    (setq-local codex-ide-agents--query-directory "/tmp/query/")
+    (let (scheduled)
+      (cl-letf (((symbol-function 'codex-ide-agents--visible-p)
+                 (lambda () t))
+                ((symbol-function 'run-with-idle-timer)
+                 (lambda (&rest _)
+                   (setq scheduled (1+ (or scheduled 0)))
+                   'agents-refresh-timer))
+                ((symbol-function 'timerp)
+                 (lambda (value) (eq value 'agents-refresh-timer))))
+        (codex-ide-agents--handle-session-event 'status-changed nil nil)
+        (codex-ide-agents--handle-session-event 'turn-started nil nil)
+        (codex-ide-agents--handle-session-event 'unrelated nil nil))
+      (should (= scheduled 1)))))
+
+(ert-deftest codex-ide-agents-poll-schedules-only-while-visible-and-safe ()
+  (with-temp-buffer
+    (let ((codex-ide-agents-auto-refresh-interval nil))
+      (codex-ide-agents-mode))
+    (setq-local codex-ide-agents--query-directory "/tmp/query/")
+    (let (visible scheduled)
+      (cl-letf (((symbol-function 'codex-ide-agents--visible-p)
+                 (lambda () visible))
+                ((symbol-function 'codex-ide-agents--schedule-refresh)
+                 (lambda () (setq scheduled (1+ (or scheduled 0))))))
+        (codex-ide-agents--poll (current-buffer))
+        (should-not scheduled)
+        (setq visible t
+              codex-ide-agents--interaction-active t)
+        (codex-ide-agents--poll (current-buffer))
+        (should-not scheduled)
+        (setq codex-ide-agents--interaction-active nil)
+        (codex-ide-agents--poll (current-buffer)))
+      (should (= scheduled 1)))))
+
+(ert-deftest codex-ide-agents-background-failure-retains-list-and-warns ()
+  (with-temp-buffer
+    (let ((codex-ide-agents-auto-refresh-interval nil))
+      (codex-ide-agents-mode))
+    (let ((inhibit-read-only t))
+      (insert "last good agents list"))
+    (let ((before (buffer-string)) displayed)
+      (cl-letf (((symbol-function 'codex-ide-agents--refresh-list)
+                 (lambda () (error "daemon unavailable")))
+                ((symbol-function 'display-buffer)
+                 (lambda (&rest _) (setq displayed t))))
+        (codex-ide-agents--background-refresh))
+      (should (equal (buffer-string) before))
+      (should-not displayed)
+      (should (equal codex-ide-agents--last-refresh-error
+                     "daemon unavailable"))
+      (should (string-match-p
+               "refresh failed"
+               (substring-no-properties
+                (codex-ide-agents--mode-line-refresh-status)))))))
+
+(ert-deftest codex-ide-agents-auto-refresh-cleans-up-timers-and-hook ()
+  (let ((buffer (generate-new-buffer " *codex-agents-auto-refresh-test*"))
+        listener poll-timer cancelled
+        (original-cancel-timer (symbol-function 'cancel-timer)))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (let ((codex-ide-agents-auto-refresh-interval 60))
+              (codex-ide-agents-mode))
+            (setq listener codex-ide-agents--event-listener
+                  poll-timer codex-ide-agents--poll-timer))
+          (cl-letf (((symbol-function 'cancel-timer)
+                     (lambda (timer)
+                       (push timer cancelled)
+                       (funcall original-cancel-timer timer))))
+            (kill-buffer buffer))
+          (should (memq poll-timer cancelled))
+          (should-not (memq listener codex-ide-session-event-hook)))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest codex-ide-agents-disabled-polling-keeps-event-refresh ()
+  (with-temp-buffer
+    (let ((codex-ide-agents-auto-refresh-interval nil))
+      (codex-ide-agents-mode))
+    (should-not codex-ide-agents--poll-timer)
+    (should (memq codex-ide-agents--event-listener
+                  codex-ide-session-event-hook))))
+
 (provide 'codex-ide-agents-tests)
 
 ;;; codex-ide-agents-tests.el ends here

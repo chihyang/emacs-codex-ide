@@ -18,11 +18,40 @@
 (require 'codex-ide-agent-detail)
 (require 'codex-ide-session-list)
 
+;;;###autoload
+(defcustom codex-ide-agents-auto-refresh-interval 5
+  "Seconds between fallback refreshes of visible agents buffers.
+Set this to nil or a non-positive number to disable timer polling.  Session
+events can still schedule automatic refreshes when polling is disabled."
+  :type '(choice (const :tag "Disable polling" nil) number)
+  :group 'codex-ide)
+
+;;;###autoload
+(defcustom codex-ide-agents-event-refresh-delay 0.1
+  "Idle delay used to coalesce agents refreshes after session events."
+  :type 'number
+  :group 'codex-ide)
+
 (defvar-local codex-ide-agents--query-directory nil
   "Directory used to host the query connection for this agents buffer.")
 
 (defvar-local codex-ide-agents--threads-by-id nil
   "Threads displayed in this agents buffer, keyed by thread id.")
+
+(defvar-local codex-ide-agents--poll-timer nil
+  "Fallback timer used to reconcile this agents buffer with the app server.")
+
+(defvar-local codex-ide-agents--refresh-timer nil
+  "Idle timer used to coalesce automatic agents refreshes.")
+
+(defvar-local codex-ide-agents--event-listener nil
+  "Function registered on `codex-ide-session-event-hook' for this buffer.")
+
+(defvar-local codex-ide-agents--interaction-active nil
+  "Non-nil while an interactive agents operation is in progress.")
+
+(defvar-local codex-ide-agents--last-refresh-error nil
+  "Most recent background refresh error message, or nil after success.")
 
 (defvar codex-ide-agents-mode-map
   (make-sparse-keymap)
@@ -47,7 +76,133 @@
   ;; A Unicode ellipsis can have a logical width that differs from its fallback
   ;; font's pixel width, shifting columns after a truncated session title.
   (setq-local truncate-string-ellipsis "...")
-  (setq-local revert-buffer-function #'codex-ide-agents-refresh))
+  (setq-local revert-buffer-function #'codex-ide-agents-refresh)
+  (setq-local mode-line-process
+              '(:eval (codex-ide-agents--mode-line-refresh-status)))
+  (codex-ide-agents--teardown-auto-refresh)
+  (codex-ide-agents--setup-auto-refresh))
+
+(defconst codex-ide-agents--session-events
+  '(created destroyed thread-attached status-changed turn-started
+            turn-completed approval-requested reset thread-deleted
+            config-changed)
+  "Session events that should schedule an agents list refresh.")
+
+(defmacro codex-ide-agents--with-interaction (&rest body)
+  "Run BODY while automatic agents refreshes are deferred."
+  (declare (indent 0) (debug t))
+  `(let ((codex-ide-agents--interaction-active t))
+     ,@body))
+
+(defun codex-ide-agents--mode-line-refresh-status ()
+  "Return a mode-line warning for the latest background refresh failure."
+  (when codex-ide-agents--last-refresh-error
+    (propertize " [refresh failed]"
+                'face 'warning
+                'help-echo codex-ide-agents--last-refresh-error)))
+
+(defun codex-ide-agents--visible-p ()
+  "Return non-nil when the current agents buffer is visible on any frame."
+  (get-buffer-window (current-buffer) 'visible))
+
+(defun codex-ide-agents--auto-refresh-safe-p ()
+  "Return non-nil when the current agents buffer may refresh in background."
+  (and (derived-mode-p 'codex-ide-agents-mode)
+       codex-ide-agents--query-directory
+       (codex-ide-agents--visible-p)
+       (not codex-ide-agents--interaction-active)
+       (not (active-minibuffer-window))))
+
+(defun codex-ide-agents--cancel-refresh-timer ()
+  "Cancel the pending coalesced refresh timer in the current buffer."
+  (when (timerp codex-ide-agents--refresh-timer)
+    (cancel-timer codex-ide-agents--refresh-timer))
+  (setq codex-ide-agents--refresh-timer nil))
+
+(defun codex-ide-agents--cancel-poll-timer ()
+  "Cancel fallback polling for the current agents buffer."
+  (when (timerp codex-ide-agents--poll-timer)
+    (cancel-timer codex-ide-agents--poll-timer))
+  (setq codex-ide-agents--poll-timer nil))
+
+(defun codex-ide-agents--background-refresh ()
+  "Refresh the current agents buffer without interrupting the user on error."
+  (condition-case err
+      (progn
+        (codex-ide-agents--refresh-list)
+        (setq codex-ide-agents--last-refresh-error nil))
+    (error
+     (setq codex-ide-agents--last-refresh-error (error-message-string err))))
+  (force-mode-line-update))
+
+(defun codex-ide-agents--run-scheduled-refresh (buffer)
+  "Run or defer a coalesced automatic refresh of agents BUFFER."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (setq codex-ide-agents--refresh-timer nil)
+      (if (codex-ide-agents--auto-refresh-safe-p)
+          (codex-ide-agents--background-refresh)
+        (when (and (derived-mode-p 'codex-ide-agents-mode)
+                   codex-ide-agents--query-directory
+                   (codex-ide-agents--visible-p))
+          (codex-ide-agents--schedule-refresh))))))
+
+(defun codex-ide-agents--schedule-refresh ()
+  "Schedule one coalesced automatic refresh for the current agents buffer."
+  (unless (timerp codex-ide-agents--refresh-timer)
+    (setq codex-ide-agents--refresh-timer
+          (run-with-idle-timer
+           codex-ide-agents-event-refresh-delay
+           nil
+           #'codex-ide-agents--run-scheduled-refresh
+           (current-buffer)))))
+
+(defun codex-ide-agents--poll (buffer)
+  "Schedule fallback reconciliation for visible live agents BUFFER."
+  (when (buffer-live-p buffer)
+    (with-current-buffer buffer
+      (when (codex-ide-agents--auto-refresh-safe-p)
+        (codex-ide-agents--schedule-refresh)))))
+
+(defun codex-ide-agents--handle-session-event (event _session _payload)
+  "Schedule a list refresh when the global agents view is affected by EVENT."
+  (when (and (memq event codex-ide-agents--session-events)
+             (codex-ide-agents--visible-p))
+    (codex-ide-agents--schedule-refresh)))
+
+(defun codex-ide-agents--setup-auto-refresh ()
+  "Subscribe this agents buffer to events and optional fallback polling."
+  (unless codex-ide-agents--event-listener
+    (let ((buffer (current-buffer)))
+      (setq codex-ide-agents--event-listener
+            (lambda (event session payload)
+              (when (buffer-live-p buffer)
+                (with-current-buffer buffer
+                  (codex-ide-agents--handle-session-event
+                   event session payload)))))))
+  (add-hook 'codex-ide-session-event-hook codex-ide-agents--event-listener)
+  (when (and (numberp codex-ide-agents-auto-refresh-interval)
+             (> codex-ide-agents-auto-refresh-interval 0))
+    (setq codex-ide-agents--poll-timer
+          (run-with-timer
+           codex-ide-agents-auto-refresh-interval
+           codex-ide-agents-auto-refresh-interval
+           #'codex-ide-agents--poll
+           (current-buffer))))
+  (add-hook 'kill-buffer-hook #'codex-ide-agents--teardown-auto-refresh nil t)
+  (add-hook 'change-major-mode-hook
+            #'codex-ide-agents--teardown-auto-refresh nil t))
+
+(defun codex-ide-agents--teardown-auto-refresh ()
+  "Remove automatic refresh timers and event subscriptions for this buffer."
+  (codex-ide-agents--cancel-refresh-timer)
+  (codex-ide-agents--cancel-poll-timer)
+  (when codex-ide-agents--event-listener
+    (remove-hook 'codex-ide-session-event-hook codex-ide-agents--event-listener)
+    (setq codex-ide-agents--event-listener nil))
+  (remove-hook 'kill-buffer-hook #'codex-ide-agents--teardown-auto-refresh t)
+  (remove-hook 'change-major-mode-hook
+               #'codex-ide-agents--teardown-auto-refresh t))
 
 (defun codex-ide-agents--active-status-p (status)
   "Return non-nil when normalized STATUS represents active work."
@@ -210,71 +365,73 @@ FAILURES is a list of (THREAD-ID . ERROR-DATA)."
 (defun codex-ide-agents-create ()
   "Create a new Codex session in the selected agent's directory."
   (interactive)
-  (let* ((thread (codex-ide-agents--thread-at-point))
-         (thread-id (alist-get 'id thread))
-         (recorded-directory (alist-get 'cwd thread)))
-    (unless (and (stringp recorded-directory)
-                 (not (string-empty-p recorded-directory)))
-      (user-error "This Codex session has no working directory"))
-    (let ((directory (file-name-as-directory
-                      (expand-file-name recorded-directory))))
-      (unless (file-accessible-directory-p directory)
-        (user-error
-         "Cannot create a Codex session; directory is unavailable: %s"
-         (abbreviate-file-name directory)))
-      (condition-case err
-          (let ((default-directory directory))
-            (codex-ide))
-        (error
-         (codex-ide-agents--show-operation-failures
-          "creation"
-          (list (cons thread-id err))
-          (concat
-           "Verify that the directory and Codex app server are available, "
-           "then retry with c.")))))))
+  (codex-ide-agents--with-interaction
+    (let* ((thread (codex-ide-agents--thread-at-point))
+           (thread-id (alist-get 'id thread))
+           (recorded-directory (alist-get 'cwd thread)))
+      (unless (and (stringp recorded-directory)
+                   (not (string-empty-p recorded-directory)))
+        (user-error "This Codex session has no working directory"))
+      (let ((directory (file-name-as-directory
+                        (expand-file-name recorded-directory))))
+        (unless (file-accessible-directory-p directory)
+          (user-error
+           "Cannot create a Codex session; directory is unavailable: %s"
+           (abbreviate-file-name directory)))
+        (condition-case err
+            (let ((default-directory directory))
+              (codex-ide))
+          (error
+           (codex-ide-agents--show-operation-failures
+            "creation"
+            (list (cons thread-id err))
+            (concat
+             "Verify that the directory and Codex app server are available, "
+             "then retry with c."))))))))
 
 (defun codex-ide-agents-rename ()
   "Prompt for and set the explicit name of the Codex session at point."
   (interactive)
-  (let* ((thread (codex-ide-agents--thread-at-point))
-         (thread-id (alist-get 'id thread))
-         (current-name (alist-get 'name thread))
-         (name
-          (string-trim
-           (read-string
-            "Rename Codex session: "
-            (if (stringp current-name) current-name "")))))
-    (when (string-empty-p name)
-      (user-error "Codex session name cannot be empty"))
-    (let (renamed)
-      (condition-case err
-          (progn
-            (codex-ide--prepare-session-operations)
-            (codex-ide--set-thread-name
-             (codex-ide--ensure-query-session-for-thread-selection
-              codex-ide-agents--query-directory)
-             thread-id
-             name)
-            (setq renamed t))
-        (error
-         (codex-ide-agents--show-operation-failures
-          "rename"
-          (list (cons thread-id err))
-          (concat
-           "Refresh the agents list with l, verify that the thread still "
-           "exists, and retry the rename."))))
-      (when renamed
+  (codex-ide-agents--with-interaction
+    (let* ((thread (codex-ide-agents--thread-at-point))
+           (thread-id (alist-get 'id thread))
+           (current-name (alist-get 'name thread))
+           (name
+            (string-trim
+             (read-string
+              "Rename Codex session: "
+              (if (stringp current-name) current-name "")))))
+      (when (string-empty-p name)
+        (user-error "Codex session name cannot be empty"))
+      (let (renamed)
         (condition-case err
             (progn
-              (codex-ide-agents-refresh)
-              (message "Renamed Codex session to %s" name))
+              (codex-ide--prepare-session-operations)
+              (codex-ide--set-thread-name
+               (codex-ide--ensure-query-session-for-thread-selection
+                codex-ide-agents--query-directory)
+               thread-id
+               name)
+              (setq renamed t))
           (error
            (codex-ide-agents--show-operation-failures
-            "refresh after rename"
+            "rename"
             (list (cons thread-id err))
             (concat
-             "The rename succeeded. Refresh the agents list with l to show "
-             "the new name."))))))))
+             "Refresh the agents list with l, verify that the thread still "
+             "exists, and retry the rename."))))
+        (when renamed
+          (condition-case err
+              (progn
+                (codex-ide-agents-refresh)
+                (message "Renamed Codex session to %s" name))
+            (error
+             (codex-ide-agents--show-operation-failures
+              "refresh after rename"
+              (list (cons thread-id err))
+              (concat
+               "The rename succeeded. Refresh the agents list with l to show "
+               "the new name.")))))))))
 
 (defun codex-ide-agents-mark-delete ()
   "Mark the Codex session at point for deletion and advance one row."
@@ -349,6 +506,71 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
         (tabulated-list-put-tag (char-to-string mark)))
       (forward-line 1))))
 
+(defun codex-ide-agents--marks ()
+  "Return close and deletion marks keyed by thread id in the current list."
+  (let (marks)
+    (save-excursion
+      (goto-char (point-min))
+      (while (not (eobp))
+        (when-let* ((mark (and (memq (char-after (line-beginning-position))
+                                      '(?D ?K))
+                                (char-after (line-beginning-position))))
+                    (row-id (tabulated-list-get-id))
+                    (thread-id (car-safe row-id)))
+          (push (cons thread-id mark) marks))
+        (forward-line 1)))
+    (nreverse marks)))
+
+(defun codex-ide-agents--window-starts ()
+  "Return visible windows and their starts for the current agents buffer."
+  (mapcar (lambda (window) (cons window (window-start window)))
+          (get-buffer-window-list (current-buffer) nil t)))
+
+(defun codex-ide-agents--capture-refresh-state ()
+  "Capture interactive state that should survive an agents list refresh."
+  (list :thread-id (car-safe (tabulated-list-get-id))
+        :point (point)
+        :column (current-column)
+        :marks (codex-ide-agents--marks)
+        :window-starts (codex-ide-agents--window-starts)))
+
+(defun codex-ide-agents--goto-thread-id (thread-id)
+  "Move to the row for THREAD-ID and return non-nil when it exists."
+  (when thread-id
+    (let (found)
+      (goto-char (point-min))
+      (while (and (not found) (not (eobp)))
+        (when (equal (car-safe (tabulated-list-get-id)) thread-id)
+          (setq found t))
+        (unless found
+          (forward-line 1)))
+      found)))
+
+(defun codex-ide-agents--restore-refresh-state (state)
+  "Restore agents buffer interaction STATE after a successful refresh."
+  (unless (codex-ide-agents--goto-thread-id (plist-get state :thread-id))
+    (goto-char (min (plist-get state :point) (point-max))))
+  (move-to-column (plist-get state :column))
+  (codex-ide-agents--restore-marks (plist-get state :marks))
+  (dolist (entry (plist-get state :window-starts))
+    (when (window-live-p (car entry))
+      (set-window-start
+       (car entry)
+       (min (cdr entry) (point-max))
+       t))))
+
+(defun codex-ide-agents--refresh-list ()
+  "Refresh the agents list while preserving selection, marks, and scrolling."
+  (let* ((state (codex-ide-agents--capture-refresh-state))
+         ;; Resolve the server request before `tabulated-list-print' changes the
+         ;; buffer so a background failure leaves the last good rows intact.
+         (entries (if (functionp tabulated-list-entries)
+                      (funcall tabulated-list-entries)
+                    tabulated-list-entries)))
+    (let ((tabulated-list-entries entries))
+      (tabulated-list-print t))
+    (codex-ide-agents--restore-refresh-state state)))
+
 (defun codex-ide-agents--close-thread (thread)
   "Close THREAD's local Emacs session without deleting its stored thread."
   (codex-ide--close-session (codex-ide-agents--local-session thread)))
@@ -403,38 +625,39 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
 
 (defun codex-ide-agents--execute-actions (actions)
   "Confirm and execute marked ACTIONS, then refresh the agents list."
-  (when (codex-ide-agents--confirm-actions actions)
-    (let (succeeded failures failed-marks)
-      (dolist (action actions)
-        (let* ((kind (car action))
-               (thread (cdr action))
-               (thread-id (alist-get 'id thread)))
-          (condition-case err
-              (progn
-                (pcase kind
-                  ('close (codex-ide-agents--close-thread thread))
-                  ('delete (codex-ide-delete-session-thread thread-id t)))
-                (setq succeeded t))
-            (error
-             (push
-              (cons thread-id
-                    (list 'error
-                          (format "%s failed: %s"
-                                  (capitalize (symbol-name kind))
-                                  (error-message-string err))))
-              failures)
-             (push (cons thread-id (if (eq kind 'close) ?K ?D))
-                   failed-marks)))))
-      (when succeeded
-        (codex-ide-agents-refresh))
-      (codex-ide-agents--restore-marks failed-marks)
-      (when failures
-        (codex-ide-agents--show-operation-failures
-         "marked operation"
-         (nreverse failures)
-         (concat
-          "Failed rows remain marked. A close requires a session running in "
-          "this Emacs; stop active work or refresh the list before retrying."))))))
+  (codex-ide-agents--with-interaction
+    (when (codex-ide-agents--confirm-actions actions)
+      (let (succeeded failures failed-marks)
+        (dolist (action actions)
+          (let* ((kind (car action))
+                 (thread (cdr action))
+                 (thread-id (alist-get 'id thread)))
+            (condition-case err
+                (progn
+                  (pcase kind
+                    ('close (codex-ide-agents--close-thread thread))
+                    ('delete (codex-ide-delete-session-thread thread-id t)))
+                  (setq succeeded t))
+              (error
+               (push
+                (cons thread-id
+                      (list 'error
+                            (format "%s failed: %s"
+                                    (capitalize (symbol-name kind))
+                                    (error-message-string err))))
+                failures)
+               (push (cons thread-id (if (eq kind 'close) ?K ?D))
+                     failed-marks)))))
+        (when succeeded
+          (codex-ide-agents-refresh))
+        (codex-ide-agents--restore-marks failed-marks)
+        (when failures
+          (codex-ide-agents--show-operation-failures
+           "marked operation"
+           (nreverse failures)
+           (concat
+            "Failed rows remain marked. A close requires a session running in "
+            "this Emacs; stop active work or refresh the list before retrying.")))))))
 
 (defun codex-ide-agents-execute-marked ()
   "Confirm and execute every session operation marked with `d' or `k'."
@@ -456,33 +679,34 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
 
 (defun codex-ide-agents--delete-threads (threads)
   "Confirm and permanently delete THREADS, then refresh the agents list."
-  (let ((count (length threads)))
-    (when (yes-or-no-p
-           (if (= count 1)
-               (let ((thread (car threads)))
-                 (format "Permanently delete Codex session %s (%s)? "
-                         (codex-ide-agents--title thread)
-                         (alist-get 'id thread)))
-             (format "Permanently delete %d marked Codex sessions? " count)))
-      (let (deleted failures)
-        (dolist (thread threads)
-          (let ((thread-id (alist-get 'id thread)))
-            (condition-case err
-                (progn
-                  (codex-ide-delete-session-thread thread-id t)
-                  (setq deleted t))
-              (error
-               (push (cons thread-id err) failures)))))
-        (when deleted
-          (codex-ide-agents-refresh))
-        (when failures
-          (codex-ide-agents--show-operation-failures
-           "deletion"
-           (nreverse failures)
-           (concat
-            "Refresh the agents list with l and check whether each thread "
-            "still has a rollout file in CODEX_HOME/sessions. Stop active "
-            "work before retrying deletion.")))))))
+  (codex-ide-agents--with-interaction
+    (let ((count (length threads)))
+      (when (yes-or-no-p
+             (if (= count 1)
+                 (let ((thread (car threads)))
+                   (format "Permanently delete Codex session %s (%s)? "
+                           (codex-ide-agents--title thread)
+                           (alist-get 'id thread)))
+               (format "Permanently delete %d marked Codex sessions? " count)))
+        (let (deleted failures)
+          (dolist (thread threads)
+            (let ((thread-id (alist-get 'id thread)))
+              (condition-case err
+                  (progn
+                    (codex-ide-delete-session-thread thread-id t)
+                    (setq deleted t))
+                (error
+                 (push (cons thread-id err) failures)))))
+          (when deleted
+            (codex-ide-agents-refresh))
+          (when failures
+            (codex-ide-agents--show-operation-failures
+             "deletion"
+             (nreverse failures)
+             (concat
+              "Refresh the agents list with l and check whether each thread "
+              "still has a rollout file in CODEX_HOME/sessions. Stop active "
+              "work before retrying deletion."))))))))
 
 (defun codex-ide-agents-delete ()
   "Confirm and permanently delete the Codex session at point."
@@ -493,7 +717,9 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
 (defun codex-ide-agents-refresh (&optional _ignore-auto _noconfirm)
   "Refresh the global Codex agents list."
   (interactive)
-  (tabulated-list-print t))
+  (codex-ide-agents--refresh-list)
+  (setq codex-ide-agents--last-refresh-error nil)
+  (force-mode-line-update))
 
 ;;;###autoload
 (defun codex-ide-agents ()
