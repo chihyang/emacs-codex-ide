@@ -118,10 +118,12 @@ Type `/agents` at the active prompt to open the global agents browser. The same
 browser is available as `M-x codex-ide-agents` and from the main menu. In the
 agents list, `RET` opens or resumes a session, `i` opens its detail view, and
 `r` renames it through the Codex app server.
-Deletion follows Dired conventions: `d` marks a session, `u` removes the mark,
-`U` clears all marks, and `X` confirms deletion of the marked sessions. `D`
-confirms and deletes the session at point. Deletion failures open an operation
-buffer with the error and a recovery tip.
+Local closing and deletion follow Dired conventions. `k` marks a session that
+is running in this Emacs for closing, while `d` marks a session for deletion;
+`u` removes one mark, `U` clears all marks, and `X` confirms and performs the
+marked operations. `K` confirms and closes the local session at point without
+deleting its resumable thread. `D` confirms and deletes the session at point.
+Operation failures open a buffer with the error and a recovery tip.
 The detail view uses clickable parent and subagent names; `^` moves to the
 parent and `o` opens or resumes the displayed session.
 

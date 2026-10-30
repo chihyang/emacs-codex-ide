@@ -13,6 +13,7 @@
 ;;; Code:
 
 (require 'subr-x)
+(require 'seq)
 (require 'codex-ide)
 (require 'codex-ide-agent-detail)
 (require 'codex-ide-session-list)
@@ -31,10 +32,12 @@
 (define-key codex-ide-agents-mode-map (kbd "l") #'codex-ide-agents-refresh)
 (define-key codex-ide-agents-mode-map (kbd "i") #'codex-ide-agents-detail)
 (define-key codex-ide-agents-mode-map (kbd "r") #'codex-ide-agents-rename)
+(define-key codex-ide-agents-mode-map (kbd "k") #'codex-ide-agents-mark-close)
 (define-key codex-ide-agents-mode-map (kbd "d") #'codex-ide-agents-mark-delete)
 (define-key codex-ide-agents-mode-map (kbd "u") #'codex-ide-agents-unmark)
 (define-key codex-ide-agents-mode-map (kbd "U") #'codex-ide-agents-unmark-all)
-(define-key codex-ide-agents-mode-map (kbd "X") #'codex-ide-agents-execute-deletions)
+(define-key codex-ide-agents-mode-map (kbd "X") #'codex-ide-agents-execute-marked)
+(define-key codex-ide-agents-mode-map (kbd "K") #'codex-ide-agents-close)
 (define-key codex-ide-agents-mode-map (kbd "D") #'codex-ide-agents-delete)
 
 (define-derived-mode codex-ide-agents-mode codex-ide-session-list-mode
@@ -183,6 +186,11 @@ LEFT and RIGHT are tabulated-list entries whose thread metadata is stored in
                       (gethash thread-id codex-ide-agents--threads-by-id))))
     (or thread (user-error "No Codex agent session at point"))))
 
+(defun codex-ide-agents--local-session (thread)
+  "Return THREAD's live session in this Emacs, or signal a user error."
+  (or (codex-ide-agents--thread-session thread)
+      (user-error "This Codex session is not running in this Emacs")))
+
 (defun codex-ide-agents--show-operation-failures (operation failures tip)
   "Show OPERATION FAILURES and recovery TIP.
 FAILURES is a list of (THREAD-ID . ERROR-DATA)."
@@ -247,41 +255,177 @@ FAILURES is a list of (THREAD-ID . ERROR-DATA)."
   (codex-ide-agents--thread-at-point)
   (tabulated-list-put-tag "D" t))
 
+(defun codex-ide-agents-mark-close ()
+  "Mark the local Codex session at point for closing and advance one row."
+  (interactive)
+  (codex-ide-agents--local-session (codex-ide-agents--thread-at-point))
+  (tabulated-list-put-tag "K" t))
+
 (defun codex-ide-agents-unmark ()
-  "Remove the deletion mark from the Codex session at point and advance."
+  "Remove the operation mark from the Codex session at point and advance."
   (interactive)
   (codex-ide-agents--thread-at-point)
   (tabulated-list-put-tag " " t))
 
 (defun codex-ide-agents-unmark-all ()
-  "Remove every deletion mark from the current agents list."
+  "Remove every close or deletion mark from the current agents list."
   (interactive)
   (let ((count 0))
     (save-excursion
       (goto-char (point-min))
       (while (not (eobp))
         (when (and (tabulated-list-get-id)
-                   (eq (char-after (line-beginning-position)) ?D))
+                   (memq (char-after (line-beginning-position)) '(?D ?K)))
           (tabulated-list-put-tag " ")
           (setq count (1+ count)))
         (forward-line 1)))
-    (message "Cleared %d deletion %s"
+    (message "Cleared %d operation %s"
              count
              (if (= count 1) "mark" "marks"))))
+
+(defun codex-ide-agents--marked-actions ()
+  "Return marked actions in the current agents buffer.
+Each element is an (ACTION . THREAD) pair, where ACTION is `close' or
+`delete'."
+  (let (actions)
+    (save-excursion
+      (goto-char (point-min))
+      (while (not (eobp))
+        (when-let* ((action
+                     (pcase (char-after (line-beginning-position))
+                       (?D 'delete)
+                       (?K 'close)))
+                    (row-id (tabulated-list-get-id))
+                    (thread-id (car-safe row-id))
+                    (thread (gethash thread-id codex-ide-agents--threads-by-id)))
+          (push (cons action thread) actions))
+        (forward-line 1)))
+    (nreverse actions)))
 
 (defun codex-ide-agents--marked-threads ()
   "Return threads marked for deletion in the current agents buffer."
   (let (threads)
-    (save-excursion
-      (goto-char (point-min))
-      (while (not (eobp))
-        (when (eq (char-after (line-beginning-position)) ?D)
-          (when-let* ((row-id (tabulated-list-get-id))
-                      (thread-id (car-safe row-id))
-                      (thread (gethash thread-id codex-ide-agents--threads-by-id)))
-            (push thread threads)))
-        (forward-line 1)))
+    (dolist (action (codex-ide-agents--marked-actions))
+      (when (eq (car action) 'delete)
+        (push (cdr action) threads)))
     (nreverse threads)))
+
+(defun codex-ide-agents--restore-marks (marks)
+  "Restore MARKS after a list refresh.
+MARKS contains (THREAD-ID . CHARACTER) pairs."
+  (save-excursion
+    (goto-char (point-min))
+    (while (not (eobp))
+      (when-let* ((row-id (tabulated-list-get-id))
+                  (thread-id (car-safe row-id))
+                  (mark (alist-get thread-id marks nil nil #'equal)))
+        (tabulated-list-put-tag (char-to-string mark)))
+      (forward-line 1))))
+
+(defun codex-ide-agents--close-thread (thread)
+  "Close THREAD's local Emacs session without deleting its stored thread."
+  (codex-ide--close-session (codex-ide-agents--local-session thread)))
+
+(defun codex-ide-agents--active-close-count (actions)
+  "Return the number of close ACTIONS that may interrupt active work."
+  (let ((count 0))
+    (dolist (action actions count)
+      (when (and (eq (car action) 'close)
+                 (when-let* ((session
+                              (codex-ide-agents--thread-session (cdr action))))
+                   (codex-ide-agents--active-status-p
+                    (codex-ide--normalize-session-status
+                     (codex-ide-session-status session)))))
+        (setq count (1+ count))))))
+
+(defun codex-ide-agents--confirm-actions (actions)
+  "Return non-nil when the user confirms marked ACTIONS."
+  (let* ((close-count (seq-count (lambda (action)
+                                   (eq (car action) 'close))
+                                 actions))
+         (delete-count (- (length actions) close-count))
+         (active-count (codex-ide-agents--active-close-count actions))
+         (prompt
+          (cond
+           ((= (length actions) 1)
+            (let* ((action (car actions))
+                   (thread (cdr action)))
+              (if (eq (car action) 'close)
+                  (format "Close local Codex session %s (%s)"
+                          (codex-ide-agents--title thread)
+                          (alist-get 'id thread))
+                (format "Permanently delete Codex session %s (%s)"
+                        (codex-ide-agents--title thread)
+                        (alist-get 'id thread)))))
+           ((and (> close-count 0) (> delete-count 0))
+            (format "Close %d local and permanently delete %d Codex sessions"
+                    close-count delete-count))
+           ((> close-count 0)
+            (format "Close %d marked local Codex sessions" close-count))
+           (t
+            (format "Permanently delete %d marked Codex sessions"
+                    delete-count)))))
+    (when (> active-count 0)
+      (setq prompt
+            (concat
+             prompt
+             (format "; %d active %s will be interrupted"
+                     active-count
+                     (if (= active-count 1) "session" "sessions")))))
+    (yes-or-no-p (concat prompt "? "))))
+
+(defun codex-ide-agents--execute-actions (actions)
+  "Confirm and execute marked ACTIONS, then refresh the agents list."
+  (when (codex-ide-agents--confirm-actions actions)
+    (let (succeeded failures failed-marks)
+      (dolist (action actions)
+        (let* ((kind (car action))
+               (thread (cdr action))
+               (thread-id (alist-get 'id thread)))
+          (condition-case err
+              (progn
+                (pcase kind
+                  ('close (codex-ide-agents--close-thread thread))
+                  ('delete (codex-ide-delete-session-thread thread-id t)))
+                (setq succeeded t))
+            (error
+             (push
+              (cons thread-id
+                    (list 'error
+                          (format "%s failed: %s"
+                                  (capitalize (symbol-name kind))
+                                  (error-message-string err))))
+              failures)
+             (push (cons thread-id (if (eq kind 'close) ?K ?D))
+                   failed-marks)))))
+      (when succeeded
+        (codex-ide-agents-refresh))
+      (codex-ide-agents--restore-marks failed-marks)
+      (when failures
+        (codex-ide-agents--show-operation-failures
+         "marked operation"
+         (nreverse failures)
+         (concat
+          "Failed rows remain marked. A close requires a session running in "
+          "this Emacs; stop active work or refresh the list before retrying."))))))
+
+(defun codex-ide-agents-execute-marked ()
+  "Confirm and execute every session operation marked with `d' or `k'."
+  (interactive)
+  (let ((actions (codex-ide-agents--marked-actions)))
+    (unless actions
+      (user-error "No Codex agent sessions marked for an operation"))
+    (codex-ide-agents--execute-actions actions)))
+
+(defalias 'codex-ide-agents-execute-deletions
+  #'codex-ide-agents-execute-marked)
+
+(defun codex-ide-agents-close ()
+  "Confirm and close the local Codex session at point."
+  (interactive)
+  (let ((thread (codex-ide-agents--thread-at-point)))
+    (codex-ide-agents--local-session thread)
+    (codex-ide-agents--execute-actions (list (cons 'close thread)))))
 
 (defun codex-ide-agents--delete-threads (threads)
   "Confirm and permanently delete THREADS, then refresh the agents list."
@@ -312,14 +456,6 @@ FAILURES is a list of (THREAD-ID . ERROR-DATA)."
             "Refresh the agents list with l and check whether each thread "
             "still has a rollout file in CODEX_HOME/sessions. Stop active "
             "work before retrying deletion.")))))))
-
-(defun codex-ide-agents-execute-deletions ()
-  "Confirm and permanently delete every session marked with `d'."
-  (interactive)
-  (let ((threads (codex-ide-agents--marked-threads)))
-    (unless threads
-      (user-error "No Codex agent sessions marked for deletion"))
-    (codex-ide-agents--delete-threads threads)))
 
 (defun codex-ide-agents-delete ()
   "Confirm and permanently delete the Codex session at point."

@@ -40,11 +40,14 @@ Key behavior:
 - `r` prompts for a non-empty explicit session name and renames the selected
   thread through the app server. Failures leave the displayed name unchanged
   and open `*Codex Agents Operation*` with recovery guidance.
-- `d` marks a session for deletion, `u` removes one mark, `U` clears all marks,
-  and `X` confirms and deletes marked sessions. `D` confirms and deletes the
-  session at point.
-  Successful deletion refreshes the list; failures show the error and recovery
-  tip in `*Codex Agents Operation*`.
+- `k` marks a session running in this Emacs for local closing, and `K` confirms
+  and immediately closes the session at point. Closing kills its Emacs buffer
+  and clears local lifecycle state while leaving the thread resumable.
+- `d` marks a session for deletion, `u` removes either kind of mark, and `U`
+  clears all marks. `X` confirms once and dispatches mixed close and deletion
+  marks; `D` confirms and deletes the session at point. Successful operations
+  refresh the list, while failures retain their marks and show the error and a
+  recovery tip in `*Codex Agents Operation*`.
 - The daemon's `updated_at` ordering is preserved, so sessions initially appear
   newest first.
 - Sorting the `Updated` column compares raw timestamps rather than the
@@ -99,6 +102,8 @@ The new `codex-ide-agents.el` module contains:
   displayed instead of resumed into a duplicate buffer, even when the daemon's
   recorded directory differs from the Emacs session directory.
 - Session renaming through the official `thread/name/set` app-server method.
+- Local session closing through the standard buffer teardown lifecycle, without
+  deleting the stored app-server thread.
 
 ### Agent detail buffer
 
@@ -166,6 +171,8 @@ local buffer displays `External`.
   - `i` dispatching the selected row to the detail view.
   - `r` seeding the current explicit name, rejecting empty names, sending the
     rename request, refreshing on success, and reporting failure.
+  - `k`/`K` local-session checks, close and deletion mark replacement, mixed
+    `X` dispatch, cancellation, refresh, and failure mark retention.
 - `tests/codex-ide-agent-detail-tests.el`
   - Metadata, parent, and direct subagent rendering.
   - In-place child navigation.
@@ -183,6 +190,7 @@ local buffer displays `External`.
   - `/agents` is registered and dispatches the global browser.
 - `tests/codex-ide-session-tests.el`
   - The resume path prefers an existing buffer across directory differences.
+  - Closing a session kills its buffer and process and clears local state.
 - `tests/codex-ide-transient-tests.el`
   - The main menu exposes the new agents command.
 
@@ -192,6 +200,7 @@ local buffer displays `External`.
 - Focused agents tests after adding Dired-style deletion controls: `13/13`
   passed.
 - Focused protocol and agents tests after adding rename: `21/21` passed.
+- Focused agents and session tests after adding local close: `29/29` passed.
 - Byte compilation passed for the modified runtime files:
   - `codex-ide-agent-detail.el`
   - `codex-ide-agents.el`
@@ -204,7 +213,7 @@ local buffer displays `External`.
   - `codex-ide-status-mode.el`
   - `codex-ide-threads.el`
   - `codex-ide-transient.el`
-- Full non-integration suite after adding rename: `748/749` passed.
+- Full non-integration suite after adding local close: `756/757` passed.
 - Modified runtime files were successfully reloaded into the running Emacs
   session with `bin/elisp-reload.sh`.
 - `git diff --check` passes and no generated `.elc` files remain.

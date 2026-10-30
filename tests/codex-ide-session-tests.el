@@ -10,6 +10,21 @@
 (require 'codex-ide-test-fixtures)
 (require 'codex-ide)
 
+(ert-deftest codex-ide-close-session-kills-buffer-and-clears-local-state ()
+  (let ((project-dir (codex-ide-test--make-temp-project)))
+    (codex-ide-test-with-fixture project-dir
+      (codex-ide-test-with-fake-processes
+        (let* ((session (codex-ide--create-process-session))
+               (buffer (codex-ide-session-buffer session))
+               (process (codex-ide-session-process session)))
+          (setf (codex-ide-session-thread-id session) "thread-close")
+          (should (buffer-live-p buffer))
+          (should (memq session codex-ide--sessions))
+          (should (codex-ide--close-session session))
+          (should-not (buffer-live-p buffer))
+          (should-not (process-live-p process))
+          (should-not (memq session codex-ide--sessions)))))))
+
 (defun codex-ide-session-test--thread-read (thread-id)
   "Return a minimal replayable `thread/read` response for THREAD-ID."
   `((thread . ((id . ,thread-id)))

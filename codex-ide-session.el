@@ -222,6 +222,26 @@ When KILL-LOG-BUFFER is non-nil, also kill SESSION's log buffer."
              (eq (current-buffer) (codex-ide-session-buffer codex-ide--session)))
     (codex-ide--teardown-session codex-ide--session t)))
 
+(defun codex-ide--close-session (session)
+  "Close SESSION's Emacs buffer and clear its local lifecycle state.
+This does not delete or archive the app-server thread, so it remains available
+for a later resume."
+  (unless (codex-ide-session-p session)
+    (user-error "No live Codex session to close"))
+  (let ((buffer (codex-ide-session-buffer session)))
+    (unless (buffer-live-p buffer)
+      (user-error "Codex session buffer is no longer live"))
+    (let ((kill-buffer-query-functions nil))
+      (unless (kill-buffer buffer)
+        (user-error "Could not close Codex session buffer %s"
+                    (buffer-name buffer))))
+    ;; Normal session buffers run `codex-ide--handle-session-buffer-killed'.
+    ;; Keep the helper defensive for sessions created by callers that omitted
+    ;; the standard buffer-local hook.
+    (when (memq session codex-ide--sessions)
+      (codex-ide--teardown-session session t))
+    t))
+
 (defun codex-ide--cleanup-all-sessions ()
   "Terminate all active Codex sessions."
   (dolist (session codex-ide--sessions)
