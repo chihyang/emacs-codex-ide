@@ -121,7 +121,8 @@ agents list, `RET` opens or resumes a session, `i` opens its detail view, and
 selected row's working directory. While the agents buffer is visible, local
 session events and a five-second fallback timer update it automatically;
 `g` remains available for an immediate manual refresh. Customize
-`codex-ide-agents-auto-refresh-interval` to change or disable timer polling.
+`codex-ide-agents-auto-refresh-interval` to change or disable timer polling,
+or press `A` to toggle all automatic refreshes for the current agents buffer.
 Local closing and deletion follow Dired conventions. `k` marks a session that
 is running in this Emacs for closing, while `d` marks a session for deletion;
 `u` removes one mark, `U` clears all marks, and `X` confirms and performs the

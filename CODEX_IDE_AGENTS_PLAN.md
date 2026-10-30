@@ -36,6 +36,8 @@ refreshes.
 - Preserve the selected session, window position, sort order, and close or
   deletion marks across refreshes whenever the corresponding rows still exist.
 - Keep the standard Emacs `g` revert binding as the manual refresh command.
+- Provide `A` to toggle both event-driven and timer-driven refresh for the
+  current agents buffer, with a mode-line indication while disabled.
 - Background refresh failures should not repeatedly pop up an error buffer;
   the buffer should retain its last good contents and make the failure visible
   unobtrusively. A manual refresh may show the full operation error.

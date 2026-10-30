@@ -53,6 +53,9 @@ events can still schedule automatic refreshes when polling is disabled."
 (defvar-local codex-ide-agents--last-refresh-error nil
   "Most recent background refresh error message, or nil after success.")
 
+(defvar-local codex-ide-agents--auto-refresh-enabled t
+  "Non-nil when this agents buffer refreshes automatically.")
+
 (defvar codex-ide-agents-mode-map
   (make-sparse-keymap)
   "Keymap for `codex-ide-agents-mode'.")
@@ -68,6 +71,8 @@ events can still schedule automatic refreshes when polling is disabled."
 (define-key codex-ide-agents-mode-map (kbd "X") #'codex-ide-agents-execute-marked)
 (define-key codex-ide-agents-mode-map (kbd "K") #'codex-ide-agents-close)
 (define-key codex-ide-agents-mode-map (kbd "D") #'codex-ide-agents-delete)
+(define-key codex-ide-agents-mode-map (kbd "A")
+            #'codex-ide-agents-toggle-auto-refresh)
 
 (define-derived-mode codex-ide-agents-mode codex-ide-session-list-mode
   "Codex-Agents"
@@ -94,11 +99,14 @@ events can still schedule automatic refreshes when polling is disabled."
      ,@body))
 
 (defun codex-ide-agents--mode-line-refresh-status ()
-  "Return a mode-line warning for the latest background refresh failure."
-  (when codex-ide-agents--last-refresh-error
+  "Return mode-line status for automatic agents refresh."
+  (cond
+   (codex-ide-agents--last-refresh-error
     (propertize " [refresh failed]"
                 'face 'warning
-                'help-echo codex-ide-agents--last-refresh-error)))
+                'help-echo codex-ide-agents--last-refresh-error))
+   ((not codex-ide-agents--auto-refresh-enabled)
+    (propertize " [auto refresh off]" 'face 'shadow))))
 
 (defun codex-ide-agents--visible-p ()
   "Return non-nil when the current agents buffer is visible on any frame."
@@ -106,7 +114,8 @@ events can still schedule automatic refreshes when polling is disabled."
 
 (defun codex-ide-agents--auto-refresh-safe-p ()
   "Return non-nil when the current agents buffer may refresh in background."
-  (and (derived-mode-p 'codex-ide-agents-mode)
+  (and codex-ide-agents--auto-refresh-enabled
+       (derived-mode-p 'codex-ide-agents-mode)
        codex-ide-agents--query-directory
        (codex-ide-agents--visible-p)
        (not codex-ide-agents--interaction-active)
@@ -165,32 +174,34 @@ events can still schedule automatic refreshes when polling is disabled."
 
 (defun codex-ide-agents--handle-session-event (event _session _payload)
   "Schedule a list refresh when the global agents view is affected by EVENT."
-  (when (and (memq event codex-ide-agents--session-events)
+  (when (and codex-ide-agents--auto-refresh-enabled
+             (memq event codex-ide-agents--session-events)
              (codex-ide-agents--visible-p))
     (codex-ide-agents--schedule-refresh)))
 
 (defun codex-ide-agents--setup-auto-refresh ()
   "Subscribe this agents buffer to events and optional fallback polling."
-  (unless codex-ide-agents--event-listener
-    (let ((buffer (current-buffer)))
-      (setq codex-ide-agents--event-listener
-            (lambda (event session payload)
-              (when (buffer-live-p buffer)
-                (with-current-buffer buffer
-                  (codex-ide-agents--handle-session-event
-                   event session payload)))))))
-  (add-hook 'codex-ide-session-event-hook codex-ide-agents--event-listener)
-  (when (and (numberp codex-ide-agents-auto-refresh-interval)
-             (> codex-ide-agents-auto-refresh-interval 0))
-    (setq codex-ide-agents--poll-timer
-          (run-with-timer
-           codex-ide-agents-auto-refresh-interval
-           codex-ide-agents-auto-refresh-interval
-           #'codex-ide-agents--poll
-           (current-buffer))))
-  (add-hook 'kill-buffer-hook #'codex-ide-agents--teardown-auto-refresh nil t)
-  (add-hook 'change-major-mode-hook
-            #'codex-ide-agents--teardown-auto-refresh nil t))
+  (when codex-ide-agents--auto-refresh-enabled
+    (unless codex-ide-agents--event-listener
+      (let ((buffer (current-buffer)))
+        (setq codex-ide-agents--event-listener
+              (lambda (event session payload)
+                (when (buffer-live-p buffer)
+                  (with-current-buffer buffer
+                    (codex-ide-agents--handle-session-event
+                     event session payload)))))))
+    (add-hook 'codex-ide-session-event-hook codex-ide-agents--event-listener)
+    (when (and (numberp codex-ide-agents-auto-refresh-interval)
+               (> codex-ide-agents-auto-refresh-interval 0))
+      (setq codex-ide-agents--poll-timer
+            (run-with-timer
+             codex-ide-agents-auto-refresh-interval
+             codex-ide-agents-auto-refresh-interval
+             #'codex-ide-agents--poll
+             (current-buffer))))
+    (add-hook 'kill-buffer-hook #'codex-ide-agents--teardown-auto-refresh nil t)
+    (add-hook 'change-major-mode-hook
+              #'codex-ide-agents--teardown-auto-refresh nil t)))
 
 (defun codex-ide-agents--teardown-auto-refresh ()
   "Remove automatic refresh timers and event subscriptions for this buffer."
@@ -202,6 +213,25 @@ events can still schedule automatic refreshes when polling is disabled."
   (remove-hook 'kill-buffer-hook #'codex-ide-agents--teardown-auto-refresh t)
   (remove-hook 'change-major-mode-hook
                #'codex-ide-agents--teardown-auto-refresh t))
+
+(defun codex-ide-agents-toggle-auto-refresh (&optional arg)
+  "Toggle automatic refresh in the current agents buffer.
+With a positive prefix ARG, enable it.  With a non-positive prefix ARG,
+disable it.  Manual refresh with `g' remains available while disabled."
+  (interactive "P")
+  (unless (derived-mode-p 'codex-ide-agents-mode)
+    (user-error "Not in a Codex agents buffer"))
+  (let ((enable
+         (if arg
+             (> (prefix-numeric-value arg) 0)
+           (not codex-ide-agents--auto-refresh-enabled))))
+    (codex-ide-agents--teardown-auto-refresh)
+    (setq codex-ide-agents--auto-refresh-enabled enable)
+    (when enable
+      (codex-ide-agents--setup-auto-refresh))
+    (force-mode-line-update)
+    (message "Codex agents automatic refresh %s"
+             (if enable "enabled" "disabled"))))
 
 (defun codex-ide-agents--active-status-p (status)
   "Return non-nil when normalized STATUS represents active work."
@@ -520,18 +550,37 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
         (forward-line 1)))
     (nreverse marks)))
 
-(defun codex-ide-agents--window-starts ()
-  "Return visible windows and their starts for the current agents buffer."
-  (mapcar (lambda (window) (cons window (window-start window)))
-          (get-buffer-window-list (current-buffer) nil t)))
+(defun codex-ide-agents--point-state (position)
+  "Return stable row and line state for buffer POSITION."
+  (save-excursion
+    (goto-char (min (max position (point-min)) (point-max)))
+    (list :thread-id (car-safe (tabulated-list-get-id))
+          :line (line-number-at-pos)
+          :column (current-column))))
+
+(defun codex-ide-agents--point-for-state (state)
+  "Return the best current buffer position corresponding to STATE."
+  (save-excursion
+    (unless (codex-ide-agents--goto-thread-id (plist-get state :thread-id))
+      (goto-char (point-min))
+      (forward-line (1- (max 1 (or (plist-get state :line) 1)))))
+    (move-to-column (or (plist-get state :column) 0))
+    (point)))
+
+(defun codex-ide-agents--window-states ()
+  "Return visible agents windows with their point and scroll state."
+  (mapcar
+   (lambda (window)
+     (list :window window
+           :point (codex-ide-agents--point-state (window-point window))
+           :start (codex-ide-agents--point-state (window-start window))))
+   (get-buffer-window-list (current-buffer) nil 'visible)))
 
 (defun codex-ide-agents--capture-refresh-state ()
   "Capture interactive state that should survive an agents list refresh."
-  (list :thread-id (car-safe (tabulated-list-get-id))
-        :point (point)
-        :column (current-column)
+  (list :point (codex-ide-agents--point-state (point))
         :marks (codex-ide-agents--marks)
-        :window-starts (codex-ide-agents--window-starts)))
+        :windows (codex-ide-agents--window-states)))
 
 (defun codex-ide-agents--goto-thread-id (thread-id)
   "Move to the row for THREAD-ID and return non-nil when it exists."
@@ -547,16 +596,20 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
 
 (defun codex-ide-agents--restore-refresh-state (state)
   "Restore agents buffer interaction STATE after a successful refresh."
-  (unless (codex-ide-agents--goto-thread-id (plist-get state :thread-id))
-    (goto-char (min (plist-get state :point) (point-max))))
-  (move-to-column (plist-get state :column))
+  (goto-char (codex-ide-agents--point-for-state (plist-get state :point)))
   (codex-ide-agents--restore-marks (plist-get state :marks))
-  (dolist (entry (plist-get state :window-starts))
-    (when (window-live-p (car entry))
-      (set-window-start
-       (car entry)
-       (min (cdr entry) (point-max))
-       t))))
+  (dolist (window-state (plist-get state :windows))
+    (let ((window (plist-get window-state :window)))
+      (when (window-live-p window)
+        (set-window-point
+         window
+         (codex-ide-agents--point-for-state
+          (plist-get window-state :point)))
+        (set-window-start
+         window
+         (codex-ide-agents--point-for-state
+          (plist-get window-state :start))
+         t)))))
 
 (defun codex-ide-agents--refresh-list ()
   "Refresh the agents list while preserving selection, marks, and scrolling."

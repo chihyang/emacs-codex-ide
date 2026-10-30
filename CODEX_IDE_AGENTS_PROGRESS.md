@@ -41,8 +41,13 @@ Key behavior:
   scroll position, and close or deletion marks for rows that still exist.
 - `codex-ide-agents-auto-refresh-interval` customizes fallback polling; nil or
   a non-positive value disables polling without disabling event refreshes.
+- `A` toggles all automatic updates for the current agents buffer while
+  retaining manual `g`; the mode line reports when automatic refresh is off.
 - Background failures retain the last good rows and show a mode-line warning
   instead of repeatedly opening an error buffer.
+- Refresh state is captured per visible window, so a background refresh keeps
+  each window's actual cursor row even when the agents buffer is not selected.
+  If a row disappears, point falls back to the same line number when possible.
 - `i` opens the selected session in `*Codex Agent Details*`.
 - `c` creates a new session in the selected row's working directory through
   the normal Codex session lifecycle and window policy. Missing or inaccessible
@@ -206,7 +211,8 @@ local buffer displays `External`.
     and reporting startup failures.
   - State preservation across refreshes, event coalescing, visible-buffer
     polling, interaction deferral, background failure handling, polling
-    disablement, and timer/hook cleanup.
+    disablement, the all-refresh toggle, non-selected-window cursor
+    preservation, line fallback, and timer/hook cleanup.
 - `tests/codex-ide-delete-session-thread-tests.el`
   - Confirmation before requests, server confirmation before local teardown,
     non-destructive cancellation and failure, batch-confirmation bypass, and
@@ -247,6 +253,8 @@ local buffer displays `External`.
 - Focused agents and session tests after adding local close: `29/29` passed.
 - Focused agents tests after adding row-directory creation: `27/27` passed.
 - Focused agents tests after adding automatic refresh: `33/33` passed.
+- Focused agents tests after adding the refresh toggle and per-window point
+  preservation: `36/36` passed.
 - Focused deletion, protocol, and agents tests after switching to
   app-server-backed deletion: `45/45` passed.
 - Focused core notification and deletion regression suite: `254/254` passed.
@@ -269,6 +277,8 @@ local buffer displays `External`.
 - Full non-integration suite after adding automatic refresh: `767/768` passed;
   the sole failure remains the unrelated MCP bridge fixture described below.
 - Full non-integration suite after app-server-backed deletion: `771/772`
+  passed; the sole failure remains the same unrelated MCP bridge fixture.
+- Full non-integration suite after the cursor-preservation fix: `774/775`
   passed; the sole failure remains the same unrelated MCP bridge fixture.
 - Modified runtime files were successfully reloaded into the running Emacs
   session with `bin/elisp-reload.sh`.

@@ -148,7 +148,9 @@
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "K"))
               #'codex-ide-agents-close))
   (should (eq (lookup-key codex-ide-agents-mode-map (kbd "D"))
-              #'codex-ide-agents-delete)))
+              #'codex-ide-agents-delete))
+  (should (eq (lookup-key codex-ide-agents-mode-map (kbd "A"))
+              #'codex-ide-agents-toggle-auto-refresh)))
 
 (defmacro codex-ide-agents-test--with-selected-row (&rest body)
   "Run BODY in an agents buffer with one selected test row."
@@ -625,6 +627,70 @@
       (beginning-of-line)
       (should (eq (char-after (line-beginning-position)) ?D)))))
 
+(ert-deftest codex-ide-agents-refresh-keeps-line-when-selected-row-disappears ()
+  (with-temp-buffer
+    (let ((codex-ide-agents-auto-refresh-interval nil))
+      (codex-ide-agents-mode))
+    (setq-local codex-ide-agents--query-directory "/tmp/query/")
+    (let ((entries
+           (list (list (cons "thread-a" "/tmp/a") (vector "Alpha"))
+                 (list (cons "thread-b" "/tmp/b") (vector "Beta"))
+                 (list (cons "thread-c" "/tmp/c") (vector "Gamma")))))
+      (setq tabulated-list-format [("Session" 15 nil)]
+            tabulated-list-padding 2
+            tabulated-list-entries entries)
+      (tabulated-list-init-header)
+      (tabulated-list-print)
+      (goto-char (point-min))
+      (search-forward "Beta")
+      (beginning-of-line)
+      (let ((line (line-number-at-pos)))
+        (setq tabulated-list-entries
+              (list (nth 0 entries)
+                    (nth 2 entries)
+                    (list (cons "thread-d" "/tmp/d") (vector "Delta"))))
+        (codex-ide-agents-refresh)
+        (should (= (line-number-at-pos) line))))))
+
+(ert-deftest codex-ide-agents-refresh-preserves-nonselected-window-point ()
+  (let ((agents-buffer (generate-new-buffer " *codex-agents-point-test*")))
+    (unwind-protect
+        (save-window-excursion
+          (delete-other-windows)
+          (let* ((other-window (selected-window))
+                 (agents-window (split-window-below))
+                 (entries
+                  (cl-loop for index from 1 to 12
+                           collect
+                           (list (cons (format "thread-%d" index)
+                                       (format "/tmp/%d" index))
+                                 (vector (format "Session %d" index))))))
+            (set-window-buffer agents-window agents-buffer)
+            (with-current-buffer agents-buffer
+              (let ((codex-ide-agents-auto-refresh-interval nil))
+                (codex-ide-agents-mode))
+              (setq-local codex-ide-agents--query-directory "/tmp/query/")
+              (setq tabulated-list-format [("Session" 15 nil)]
+                    tabulated-list-padding 2
+                    tabulated-list-entries entries)
+              (tabulated-list-init-header)
+              (tabulated-list-print)
+              (goto-char (point-min))
+              (search-forward "Session 8")
+              (beginning-of-line)
+              (set-window-point agents-window (point)))
+            ;; Reproduce a background refresh while another window is
+            ;; selected and the buffer's own point is unrelated.
+            (select-window other-window)
+            (with-current-buffer agents-buffer
+              (goto-char (point-min))
+              (codex-ide-agents-refresh)
+              (goto-char (window-point agents-window))
+              (should (equal (car-safe (tabulated-list-get-id))
+                             "thread-8")))))
+      (when (buffer-live-p agents-buffer)
+        (kill-buffer agents-buffer)))))
+
 (ert-deftest codex-ide-agents-session-events-coalesce-refreshes ()
   (with-temp-buffer
     (let ((codex-ide-agents-auto-refresh-interval nil))
@@ -713,6 +779,27 @@
     (should-not codex-ide-agents--poll-timer)
     (should (memq codex-ide-agents--event-listener
                   codex-ide-session-event-hook))))
+
+(ert-deftest codex-ide-agents-toggle-auto-refresh-controls-all-background-updates ()
+  (with-temp-buffer
+    (let ((codex-ide-agents-auto-refresh-interval 60))
+      (codex-ide-agents-mode))
+    (should codex-ide-agents--auto-refresh-enabled)
+    (should (timerp codex-ide-agents--poll-timer))
+    (should codex-ide-agents--event-listener)
+    (codex-ide-agents-toggle-auto-refresh)
+    (should-not codex-ide-agents--auto-refresh-enabled)
+    (should-not codex-ide-agents--poll-timer)
+    (should-not codex-ide-agents--refresh-timer)
+    (should-not codex-ide-agents--event-listener)
+    (should (string-match-p
+             "auto refresh off"
+             (substring-no-properties
+              (codex-ide-agents--mode-line-refresh-status))))
+    (codex-ide-agents-toggle-auto-refresh)
+    (should codex-ide-agents--auto-refresh-enabled)
+    (should (timerp codex-ide-agents--poll-timer))
+    (should codex-ide-agents--event-listener)))
 
 (provide 'codex-ide-agents-tests)
 
