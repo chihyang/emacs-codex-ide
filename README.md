@@ -120,7 +120,7 @@ agents list, `RET` opens or resumes a session, `i` opens its detail view, and
 `r` renames it through the Codex app server. `c` starts a new session in the
 selected row's working directory. While the agents buffer is visible, local
 session events and a five-second fallback timer update it automatically;
-`l` remains available for an immediate manual refresh. Customize
+`g` remains available for an immediate manual refresh. Customize
 `codex-ide-agents-auto-refresh-interval` to change or disable timer polling.
 Local closing and deletion follow Dired conventions. `k` marks a session that
 is running in this Emacs for closing, while `d` marks a session for deletion;

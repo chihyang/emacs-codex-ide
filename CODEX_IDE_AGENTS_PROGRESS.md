@@ -35,7 +35,7 @@ Key behavior:
 - `M-RET` and `C-M-j` perform the same action in another window through the
   shared session-list bindings.
 - The list automatically refreshes after local session events and reconciles
-  external daemon activity every five seconds while visible. `l` still
+  external daemon activity every five seconds while visible. `g` still
   performs an immediate manual refresh.
 - Automatic and manual refreshes preserve the selected session, sort order,
   scroll position, and close or deletion marks for rows that still exist.
@@ -281,7 +281,7 @@ No integration tests were run, in accordance with `AGENTS.md`.
    while an active terminal-only session displays `External`.
 5. Confirm `i` shows live metadata and parent/subagent navigation against the
    shared daemon.
-6. Confirm local and external activity updates the visible list without `l`,
+6. Confirm local and external activity updates the visible list without `g`,
    and that selection and marks survive those updates.
 7. Review the final diff and commit only after explicit user approval.
 

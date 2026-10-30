@@ -58,7 +58,6 @@ events can still schedule automatic refreshes when polling is disabled."
   "Keymap for `codex-ide-agents-mode'.")
 
 (set-keymap-parent codex-ide-agents-mode-map codex-ide-session-list-mode-map)
-(define-key codex-ide-agents-mode-map (kbd "l") #'codex-ide-agents-refresh)
 (define-key codex-ide-agents-mode-map (kbd "i") #'codex-ide-agents-detail)
 (define-key codex-ide-agents-mode-map (kbd "c") #'codex-ide-agents-create)
 (define-key codex-ide-agents-mode-map (kbd "r") #'codex-ide-agents-rename)
@@ -418,7 +417,7 @@ FAILURES is a list of (THREAD-ID . ERROR-DATA)."
             "rename"
             (list (cons thread-id err))
             (concat
-             "Refresh the agents list with l, verify that the thread still "
+             "Refresh the agents list with g, verify that the thread still "
              "exists, and retry the rename."))))
         (when renamed
           (condition-case err
@@ -430,7 +429,7 @@ FAILURES is a list of (THREAD-ID . ERROR-DATA)."
               "refresh after rename"
               (list (cons thread-id err))
               (concat
-               "The rename succeeded. Refresh the agents list with l to show "
+               "The rename succeeded. Refresh the agents list with g to show "
                "the new name.")))))))))
 
 (defun codex-ide-agents-mark-delete ()
@@ -704,7 +703,7 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
              "deletion"
              (nreverse failures)
              (concat
-              "Refresh the agents list with l and check whether each thread "
+              "Refresh the agents list with g and check whether each thread "
               "still has a rollout file in CODEX_HOME/sessions. Stop active "
               "work before retrying deletion."))))))))
 
