@@ -243,6 +243,19 @@ NAME must be a non-empty string."
    `((threadId . ,thread-id)
      (name . ,name))))
 
+(defun codex-ide--delete-thread (&optional session thread-id)
+  "Permanently delete THREAD-ID through the app server using SESSION."
+  (setq session (or session (codex-ide--get-default-session-for-current-buffer)))
+  (unless session
+    (error "No Codex session available"))
+  (unless (and (stringp thread-id)
+               (not (string-empty-p thread-id)))
+    (error "Invalid thread id: %S" thread-id))
+  (codex-ide--request-sync
+   session
+   "thread/delete"
+   `((threadId . ,thread-id))))
+
 (defun codex-ide--skills-list-params (&optional session force-reload)
   "Build `skills/list` params for SESSION.
 When FORCE-RELOAD is non-nil, ask app-server to bypass its skills cache."

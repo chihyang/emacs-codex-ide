@@ -58,6 +58,10 @@ Key behavior:
   marks; `D` confirms and deletes the session at point. Successful operations
   refresh the list, while failures retain their marks and show the error and a
   recovery tip in `*Codex Agents Operation*`.
+- Deletion uses the official `thread/delete` app-server request. Local buffers
+  and lifecycle state are closed only after server confirmation; rejection is
+  non-destructive, and unsupported servers receive upgrade guidance rather
+  than a direct-filesystem fallback.
 - The daemon's `updated_at` ordering is preserved, so sessions initially appear
   newest first.
 - Sorting the `Updated` column compares raw timestamps rather than the
@@ -116,6 +120,10 @@ The new `codex-ide-agents.el` module contains:
   deleting the stored app-server thread.
 - New-session creation in a selected row's directory through the existing
   `codex-ide` entry point.
+- Shared server-authoritative deletion through `thread/delete`, reused by the
+  agents and project status interfaces without direct rollout-file removal.
+- `thread/deleted` notification normalization into the shared session-event
+  hook, including notifications received by query-only connections.
 - Buffer-local session-event and fallback timers that coalesce automatic
   updates, refresh only while the agents list is visible, and are removed when
   the buffer is killed or changes mode.
@@ -199,6 +207,10 @@ local buffer displays `External`.
   - State preservation across refreshes, event coalescing, visible-buffer
     polling, interaction deferral, background failure handling, polling
     disablement, and timer/hook cleanup.
+- `tests/codex-ide-delete-session-thread-tests.el`
+  - Confirmation before requests, server confirmation before local teardown,
+    non-destructive cancellation and failure, batch-confirmation bypass, and
+    unsupported-server guidance.
 - `tests/codex-ide-agent-detail-tests.el`
   - Metadata, parent, and direct subagent rendering.
   - In-place child navigation.
@@ -212,6 +224,7 @@ local buffer displays `External`.
   - Multiple pages are combined.
   - Repeated pagination cursors are rejected.
   - Direct subagent queries include `parentThreadId` and paginate.
+  - Thread deletion sends the official `thread/delete` request and payload.
 - `tests/codex-ide-slash-command-tests.el`
   - `/agents` is registered and dispatches the global browser.
 - `tests/codex-ide-session-tests.el`
@@ -221,6 +234,7 @@ local buffer displays `External`.
   - A new thread's shared-daemon notification does not steal another live
     session's thread association, while the intended new session still accepts
     it.
+  - Query-only connections normalize `thread/deleted` into a session event.
 - `tests/codex-ide-transient-tests.el`
   - The main menu exposes the new agents command.
 
@@ -233,6 +247,9 @@ local buffer displays `External`.
 - Focused agents and session tests after adding local close: `29/29` passed.
 - Focused agents tests after adding row-directory creation: `27/27` passed.
 - Focused agents tests after adding automatic refresh: `33/33` passed.
+- Focused deletion, protocol, and agents tests after switching to
+  app-server-backed deletion: `45/45` passed.
+- Focused core notification and deletion regression suite: `254/254` passed.
 - Byte compilation passed for the modified runtime files:
   - `codex-ide-agent-detail.el`
   - `codex-ide-agents.el`
@@ -251,6 +268,8 @@ local buffer displays `External`.
   session-routing regression fix: `761/762` passed.
 - Full non-integration suite after adding automatic refresh: `767/768` passed;
   the sole failure remains the unrelated MCP bridge fixture described below.
+- Full non-integration suite after app-server-backed deletion: `771/772`
+  passed; the sole failure remains the same unrelated MCP bridge fixture.
 - Modified runtime files were successfully reloaded into the running Emacs
   session with `bin/elisp-reload.sh`.
 - `git diff --check` passes and no generated `.elc` files remain.

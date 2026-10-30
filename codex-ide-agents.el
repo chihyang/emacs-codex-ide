@@ -656,7 +656,8 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
            (nreverse failures)
            (concat
             "Failed rows remain marked. A close requires a session running in "
-            "this Emacs; stop active work or refresh the list before retrying.")))))))
+            "this Emacs. If thread/delete is unavailable, upgrade Codex or "
+            "manage that session with a compatible client.")))))))
 
 (defun codex-ide-agents-execute-marked ()
   "Confirm and execute every session operation marked with `d' or `k'."
@@ -703,9 +704,9 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
              "deletion"
              (nreverse failures)
              (concat
-              "Refresh the agents list with g and check whether each thread "
-              "still has a rollout file in CODEX_HOME/sessions. Stop active "
-              "work before retrying deletion."))))))))
+              "Refresh the agents list with g and retry. If thread/delete is "
+              "unavailable, upgrade Codex or manage that session with a "
+              "compatible client."))))))))
 
 (defun codex-ide-agents-delete ()
   "Confirm and permanently delete the Codex session at point."

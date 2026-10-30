@@ -6363,12 +6363,13 @@ identifiers nested in `thread' or `turn' objects are also recognized."
         (params (alist-get 'params message))
         (buffer (codex-ide-session-buffer session)))
     (codex-ide-log-message session "Received notification %s" method)
-    (if (not (codex-ide--notification-belongs-to-session-p session params))
+    (if (and (not (equal method "thread/deleted"))
+             (not (codex-ide--notification-belongs-to-session-p session params)))
         (codex-ide-log-message
          session
          "Ignoring notification %s for thread %s (session thread %s)"
          method
-         (alist-get 'threadId params)
+         (codex-ide--notification-thread-id params)
          (codex-ide-session-thread-id session))
       (pcase method
 	("thread/started"
@@ -6388,6 +6389,13 @@ identifiers nested in `thread' or `turn' objects are also recognized."
 	  (codex-ide-session-thread-id session))
 	 (codex-ide--set-session-status session "idle" 'thread-started)
 	 (codex-ide--update-header-line session))
+	("thread/deleted"
+	 (let ((thread-id (codex-ide--notification-thread-id params)))
+	   (codex-ide-log-message session "Thread deleted: %s" thread-id)
+	   (codex-ide--run-session-event
+	    'thread-deleted
+	    session
+	    :thread-id thread-id)))
 	("thread/settings/updated"
 	 (codex-ide--remember-reasoning-effort session params)
 	 (codex-ide--remember-model-name session params)

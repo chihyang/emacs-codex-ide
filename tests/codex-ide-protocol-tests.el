@@ -36,6 +36,22 @@
    (codex-ide--set-thread-name 'query-session "thread-1" "")
    :type 'error))
 
+(ert-deftest codex-ide-delete-thread-sends-official-request ()
+  (let (request)
+    (cl-letf (((symbol-function 'codex-ide--request-sync)
+               (lambda (session method params)
+                 (setq request (list session method params))
+                 '())))
+      (should-not (codex-ide--delete-thread 'query-session "thread-1"))
+      (should
+       (equal request
+              '(query-session
+                "thread/delete"
+                ((threadId . "thread-1"))))))))
+
+(ert-deftest codex-ide-delete-thread-rejects-empty-id ()
+  (should-error (codex-ide--delete-thread 'query-session "") :type 'error))
+
 (ert-deftest codex-ide-list-threads-across-directories-omits-cwd-and-paginates ()
   (let ((project-dir (codex-ide-test--make-temp-project))
         (requests nil))

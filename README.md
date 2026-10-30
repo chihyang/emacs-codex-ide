@@ -126,8 +126,10 @@ Local closing and deletion follow Dired conventions. `k` marks a session that
 is running in this Emacs for closing, while `d` marks a session for deletion;
 `u` removes one mark, `U` clears all marks, and `X` confirms and performs the
 marked operations. `K` confirms and closes the local session at point without
-deleting its resumable thread. `D` confirms and deletes the session at point.
-Operation failures open a buffer with the error and a recovery tip.
+deleting its resumable thread. `D` confirms and deletes the session at point
+through the official app-server API. A rejected deletion leaves its row, mark,
+and any local session buffer unchanged. Operation failures open a buffer with
+the error and a recovery tip.
 The detail view uses clickable parent and subagent names; `^` moves to the
 parent and `o` opens or resumes the displayed session.
 
