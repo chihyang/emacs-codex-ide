@@ -66,6 +66,8 @@ events can still schedule automatic refreshes when polling is disabled."
 (define-key codex-ide-agents-mode-map (kbd "r") #'codex-ide-agents-rename)
 (define-key codex-ide-agents-mode-map (kbd "k") #'codex-ide-agents-mark-close)
 (define-key codex-ide-agents-mode-map (kbd "d") #'codex-ide-agents-mark-delete)
+(define-key codex-ide-agents-mode-map (kbd "a") #'codex-ide-agents-mark-archive)
+(define-key codex-ide-agents-mode-map (kbd "R") #'codex-ide-agents-mark-unarchive)
 (define-key codex-ide-agents-mode-map (kbd "u") #'codex-ide-agents-unmark)
 (define-key codex-ide-agents-mode-map (kbd "U") #'codex-ide-agents-unmark-all)
 (define-key codex-ide-agents-mode-map (kbd "X") #'codex-ide-agents-execute-marked)
@@ -482,6 +484,20 @@ FAILURES is a list of (THREAD-ID . ERROR-DATA)."
   (codex-ide-agents--thread-at-point)
   (tabulated-list-put-tag "D" t))
 
+(defun codex-ide-agents-mark-archive ()
+  "Mark the active Codex session at point for archiving and advance."
+  (interactive)
+  (when (alist-get 'archived (codex-ide-agents--thread-at-point))
+    (user-error "This Codex session is already archived"))
+  (tabulated-list-put-tag "A" t))
+
+(defun codex-ide-agents-mark-unarchive ()
+  "Mark the archived Codex session at point for restoring and advance."
+  (interactive)
+  (unless (alist-get 'archived (codex-ide-agents--thread-at-point))
+    (user-error "This Codex session is not archived"))
+  (tabulated-list-put-tag "R" t))
+
 (defun codex-ide-agents-mark-close ()
   "Mark the local Codex session at point for closing and advance one row."
   (interactive)
@@ -494,26 +510,31 @@ FAILURES is a list of (THREAD-ID . ERROR-DATA)."
   (codex-ide-agents--thread-at-point)
   (tabulated-list-put-tag " " t))
 
-(defun codex-ide-agents-unmark-all ()
-  "Remove every close or deletion mark from the current agents list."
-  (interactive)
+(defun codex-ide-agents--clear-marks ()
+  "Clear operation marks in the current agents list and return their count."
   (let ((count 0))
     (save-excursion
       (goto-char (point-min))
       (while (not (eobp))
         (when (and (tabulated-list-get-id)
-                   (memq (char-after (line-beginning-position)) '(?D ?K)))
+                   (memq (char-after (line-beginning-position))
+                         '(?D ?K ?A ?R)))
           (tabulated-list-put-tag " ")
           (setq count (1+ count)))
         (forward-line 1)))
+    count))
+
+(defun codex-ide-agents-unmark-all ()
+  "Remove every operation mark from the current agents list."
+  (interactive)
+  (let ((count (codex-ide-agents--clear-marks)))
     (message "Cleared %d operation %s"
              count
              (if (= count 1) "mark" "marks"))))
 
 (defun codex-ide-agents--marked-actions ()
   "Return marked actions in the current agents buffer.
-Each element is an (ACTION . THREAD) pair, where ACTION is `close' or
-`delete'."
+Each element is an (ACTION . THREAD) pair."
   (let (actions)
     (save-excursion
       (goto-char (point-min))
@@ -521,7 +542,9 @@ Each element is an (ACTION . THREAD) pair, where ACTION is `close' or
         (when-let* ((action
                      (pcase (char-after (line-beginning-position))
                        (?D 'delete)
-                       (?K 'close)))
+                       (?K 'close)
+                       (?A 'archive)
+                       (?R 'unarchive)))
                     (row-id (tabulated-list-get-id))
                     (thread-id (car-safe row-id))
                     (thread (gethash thread-id codex-ide-agents--threads-by-id)))
@@ -550,13 +573,13 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
       (forward-line 1))))
 
 (defun codex-ide-agents--marks ()
-  "Return close and deletion marks keyed by thread id in the current list."
+  "Return operation marks keyed by thread id in the current list."
   (let (marks)
     (save-excursion
       (goto-char (point-min))
       (while (not (eobp))
         (when-let* ((mark (and (memq (char-after (line-beginning-position))
-                                      '(?D ?K))
+                                      '(?D ?K ?A ?R))
                                 (char-after (line-beginning-position))))
                     (row-id (tabulated-list-get-id))
                     (thread-id (car-safe row-id)))
@@ -658,28 +681,43 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
   (let* ((close-count (seq-count (lambda (action)
                                    (eq (car action) 'close))
                                  actions))
-         (delete-count (- (length actions) close-count))
+         (delete-count (seq-count (lambda (action)
+                                    (eq (car action) 'delete))
+                                  actions))
+         (archive-count (seq-count (lambda (action)
+                                     (eq (car action) 'archive))
+                                   actions))
+         (unarchive-count (seq-count (lambda (action)
+                                       (eq (car action) 'unarchive))
+                                     actions))
          (active-count (codex-ide-agents--active-close-count actions))
          (prompt
-          (cond
-           ((= (length actions) 1)
-            (let* ((action (car actions))
-                   (thread (cdr action)))
-              (if (eq (car action) 'close)
-                  (format "Close local Codex session %s (%s)"
-                          (codex-ide-agents--title thread)
-                          (alist-get 'id thread))
-                (format "Permanently delete Codex session %s (%s)"
+          (if (= (length actions) 1)
+              (let* ((action (car actions))
+                     (thread (cdr action)))
+                (format "%s Codex session %s (%s)"
+                        (pcase (car action)
+                          ('close "Close local")
+                          ('delete "Permanently delete")
+                          ('archive "Archive")
+                          ('unarchive "Unarchive"))
                         (codex-ide-agents--title thread)
-                        (alist-get 'id thread)))))
-           ((and (> close-count 0) (> delete-count 0))
-            (format "Close %d local and permanently delete %d Codex sessions"
-                    close-count delete-count))
-           ((> close-count 0)
-            (format "Close %d marked local Codex sessions" close-count))
-           (t
-            (format "Permanently delete %d marked Codex sessions"
-                    delete-count)))))
+                        (alist-get 'id thread)))
+            (let ((summary
+                   (string-join
+                    (delq nil
+                          (list (when (> close-count 0)
+                                  (format "close %d local" close-count))
+                                (when (> delete-count 0)
+                                  (format "permanently delete %d" delete-count))
+                                (when (> archive-count 0)
+                                  (format "archive %d" archive-count))
+                                (when (> unarchive-count 0)
+                                  (format "unarchive %d" unarchive-count))))
+                    " and ")))
+              (format "%s%s Codex sessions"
+                      (upcase (substring summary 0 1))
+                      (substring summary 1))))))
     (when (> active-count 0)
       (setq prompt
             (concat
@@ -702,7 +740,13 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
                 (progn
                   (pcase kind
                     ('close (codex-ide-agents--close-thread thread))
-                    ('delete (codex-ide-delete-session-thread thread-id t)))
+                    ('delete (codex-ide-delete-session-thread thread-id t))
+                    ((or 'archive 'unarchive)
+                     (codex-ide--prepare-session-operations)
+                     (codex-ide--set-thread-archived
+                      (codex-ide--ensure-query-session-for-thread-selection
+                       codex-ide-agents--query-directory)
+                      thread-id (eq kind 'archive))))
                   (setq succeeded t))
               (error
                (push
@@ -712,9 +756,14 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
                                     (capitalize (symbol-name kind))
                                     (error-message-string err))))
                 failures)
-               (push (cons thread-id (if (eq kind 'close) ?K ?D))
+               (push (cons thread-id (pcase kind
+                                       ('close ?K)
+                                       ('delete ?D)
+                                       ('archive ?A)
+                                       ('unarchive ?R)))
                      failed-marks)))))
         (when succeeded
+          (codex-ide-agents--clear-marks)
           (codex-ide-agents-refresh))
         (codex-ide-agents--restore-marks failed-marks)
         (when failures
@@ -722,12 +771,12 @@ MARKS contains (THREAD-ID . CHARACTER) pairs."
            "marked operation"
            (nreverse failures)
            (concat
-            "Failed rows remain marked. A close requires a session running in "
-            "this Emacs. If thread/delete is unavailable, upgrade Codex or "
-            "manage that session with a compatible client.")))))))
+            "Failed rows remain marked. Refresh with g and retry. A close "
+            "requires a session running in this Emacs. If an app-server "
+            "method is unavailable, upgrade Codex.")))))))
 
 (defun codex-ide-agents-execute-marked ()
-  "Confirm and execute every session operation marked with `d' or `k'."
+  "Confirm and execute every marked session operation."
   (interactive)
   (let ((actions (codex-ide-agents--marked-actions)))
     (unless actions

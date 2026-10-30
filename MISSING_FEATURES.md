@@ -26,7 +26,7 @@ official Codex documentation as reviewed on 2026-10-22.
 | TODO | Apps and connectors | Browse available apps, authenticate connections, and insert app mentions into prompts. |
 | TODO | MCP management | List general MCP servers and tools, inspect diagnostics, add or remove servers, and perform MCP OAuth login/logout. Existing MCP tool calls and elicitations are already supported. |
 | TODO | Complete prompt mentions | Add `@` completion for files, directories, apps, and plugins. Only `$skill` completion is currently implemented. |
-| TODO | Session lifecycle | Archive and unarchive stored sessions. Rename and official app-server-backed deletion are implemented. |
+| COMPLETE | Session lifecycle | Archive, unarchive, rename, and official app-server-backed deletion are implemented. |
 | TODO | Plan mode | Add an explicit plan-mode toggle and plan-oriented submission flow. Plan output already renders correctly. |
 | TODO | Persistent goals | Create, inspect, edit, pause, resume, and clear session goals. |
 | TODO | Memories | Control memory injection and generation and show active memory state. |

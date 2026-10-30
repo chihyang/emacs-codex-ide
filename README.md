@@ -124,10 +124,11 @@ session events and a five-second fallback timer update it automatically;
 `g` remains available for an immediate manual refresh. Customize
 `codex-ide-agents-auto-refresh-interval` to change or disable timer polling,
 or press `A` to toggle all automatic refreshes for the current agents buffer.
-Local closing and deletion follow Dired conventions. `k` marks a session that
-is running in this Emacs for closing, while `d` marks a session for deletion;
-`u` removes one mark, `U` clears all marks, and `X` confirms and performs the
-marked operations. `K` confirms and closes the local session at point without
+Session operations follow Dired conventions. `k` marks a session running in
+this Emacs for closing, `d` marks one for deletion, `a` marks an active session
+for archiving, and `R` marks an archived session for restoring. `u` removes
+one mark, `U` clears all marks, and `X` confirms and performs the marked
+operations. `K` confirms and closes the local session at point without
 deleting its resumable thread. `D` confirms and deletes the session at point
 through the official app-server API. A rejected deletion leaves its row, mark,
 and any local session buffer unchanged. Operation failures open a buffer with

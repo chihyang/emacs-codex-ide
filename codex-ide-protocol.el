@@ -256,6 +256,20 @@ NAME must be a non-empty string."
    "thread/delete"
    `((threadId . ,thread-id))))
 
+(defun codex-ide--set-thread-archived (&optional session thread-id archived)
+  "Set THREAD-ID's archive state through SESSION.
+When ARCHIVED is non-nil, archive it; otherwise unarchive it."
+  (setq session (or session (codex-ide--get-default-session-for-current-buffer)))
+  (unless session
+    (error "No Codex session available"))
+  (unless (and (stringp thread-id)
+               (not (string-empty-p thread-id)))
+    (error "Invalid thread id: %S" thread-id))
+  (codex-ide--request-sync
+   session
+   (if archived "thread/archive" "thread/unarchive")
+   `((threadId . ,thread-id))))
+
 (defun codex-ide--skills-list-params (&optional session force-reload)
   "Build `skills/list` params for SESSION.
 When FORCE-RELOAD is non-nil, ask app-server to bypass its skills cache."

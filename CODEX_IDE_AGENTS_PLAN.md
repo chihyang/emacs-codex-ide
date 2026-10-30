@@ -15,8 +15,9 @@ The first implementation milestone will add:
 4. local session closing, and
 5. robust, app-server-backed deletion.
 
-Archive and unarchive actions, remote app-server support, and broader
-replacement of `codex-ide-status` remain outside this milestone.
+Archive and unarchive actions were added after this milestone. Remote
+app-server support and broader replacement of `codex-ide-status` remain
+deferred.
 
 ## User-facing behavior
 
@@ -322,7 +323,6 @@ The milestone is complete when:
 
 ## Later work
 
-- Archive and unarchive commands and bindings.
 - A deliberate UI for clearing an explicit session name.
 - Remote app-server support.
 - Final decision on replacing or redirecting `codex-ide-status`.

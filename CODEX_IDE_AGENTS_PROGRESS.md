@@ -58,11 +58,14 @@ Key behavior:
 - `k` marks a session running in this Emacs for local closing, and `K` confirms
   and immediately closes the session at point. Closing kills its Emacs buffer
   and clears local lifecycle state while leaving the thread resumable.
-- `d` marks a session for deletion, `u` removes either kind of mark, and `U`
-  clears all marks. `X` confirms once and dispatches mixed close and deletion
-  marks; `D` confirms and deletes the session at point. Successful operations
-  refresh the list, while failures retain their marks and show the error and a
-  recovery tip in `*Codex Agents Operation*`.
+- `d` marks a session for deletion, `a` marks an active session for archiving,
+  and `R` marks an archived session for restoring. `u` removes one mark and
+  `U` clears all marks. `X` confirms once and dispatches mixed operations;
+  `D` confirms and deletes the session at point. Successful operations refresh
+  the list, while failures retain their marks and show the error and a recovery
+  tip in `*Codex Agents Operation*`.
+- Archive and restore use the app-server's `thread/archive` and
+  `thread/unarchive` requests. Archiving may also archive spawned descendants.
 - Deletion uses the official `thread/delete` app-server request. Local buffers
   and lifecycle state are closed only after server confirmation; rejection is
   non-destructive, and unsupported servers receive upgrade guidance rather
@@ -325,7 +328,6 @@ No integration tests were run, in accordance with `AGENTS.md`.
 
 ## Deferred follow-up
 
-- Archive and unarchive actions through confirmed marks and `X`.
 - A `%` filter for list columns.
 - Remote app-server support.
 - Replacing or redirecting `codex-ide-status` once the agents interface is a
